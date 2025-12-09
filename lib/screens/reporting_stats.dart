@@ -1,0 +1,669 @@
+// screens/reporting_stats.dart
+import 'package:flutter/material.dart';
+import '../app_theme.dart';
+import 'package:intl/intl.dart';
+import '../services/local_database_service.dart';
+
+class ReportingStatsScreen extends StatefulWidget {
+  const ReportingStatsScreen({super.key});
+
+  @override
+  State<ReportingStatsScreen> createState() => _ReportingStatsScreenState();
+}
+
+class _ReportingStatsScreenState extends State<ReportingStatsScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fade;
+
+  String _periode = 'Ce mois';
+  DateTimeRange? _customRange;
+  bool _loading = true;
+  String? _error;
+
+  // No hard-coded reporting/demo data — charts and rankings load from DB/services
+  final Map<String, double> _caData = {};
+
+  final List<TopProduit> _topProduits = [];
+  final List<TopVendeur> _topVendeurs = [];
+
+  final List<FamilleStats> _familles = [];
+  double _caTotal = 0;
+  int _nbVentes = 0;
+  double _panierMoyen = 0;
+  double _marge = 0;
+  double _tauxMarge = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
+    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller.forward();
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      _caData.clear();
+      _topProduits.clear();
+      _topVendeurs.clear();
+      _familles.clear();
+      _caTotal = 0;
+      _nbVentes = 0;
+      _panierMoyen = 0;
+      _marge = 0;
+      _tauxMarge = 0;
+
+      await _loadVentes();
+      await _loadTopProduits();
+      await _loadFamilles();
+      await _loadTopVendeurs();
+
+      setState(() {
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  _PeriodeFilter _periodeFilter() {
+    DateTime? from;
+    final now = DateTime.now();
+    switch (_periode) {
+      case 'Aujourd\'hui':
+        from = DateTime(now.year, now.month, now.day);
+        break;
+      case '7 jours':
+        from = now.subtract(const Duration(days: 6));
+        break;
+      case 'Ce mois':
+        from = DateTime(now.year, now.month, 1);
+        break;
+      case '3 mois':
+        from = DateTime(now.year, now.month - 2, 1);
+        break;
+      case 'Cette année':
+        from = DateTime(now.year, 1, 1);
+        break;
+      default:
+        break;
+    }
+    if (from == null && _customRange != null) {
+      from = _customRange!.start;
+    }
+    if (from == null) {
+      return const _PeriodeFilter(where: null, args: []);
+    }
+    return _PeriodeFilter(where: 'date >= ?', args: [from.toIso8601String()]);
+  }
+
+  Future<void> _loadVentes() async {
+    final db = LocalDatabaseService.instance.db;
+    final filter = _periodeFilter();
+    final rows = await db.query(
+      'ventes',
+      where: filter.where,
+      whereArgs: filter.args,
+    );
+
+    final Map<String, double> caByDay = {};
+    double caTotal = 0;
+    int nbVentes = 0;
+    for (final r in rows) {
+      final iso = r['date'] as String? ?? '';
+      final dt = DateTime.tryParse(iso) ?? DateTime.now();
+      final ca = (r['montant'] as num?)?.toDouble() ?? 0;
+      caTotal += ca;
+      nbVentes += 1;
+      final label = DateFormat('dd/MM').format(dt);
+      caByDay[label] = (caByDay[label] ?? 0) + ca;
+    }
+
+    double marge = 0;
+    try {
+      final marginRows = await db.rawQuery('''
+        SELECT lv.quantite, lv.prix, lv.remise, m.prix_achat
+        FROM lignes_vente lv
+        JOIN ventes v ON v.id = lv.vente_id
+        LEFT JOIN medicaments m ON m.id = lv.medicament_id
+        ${filter.where != null ? 'WHERE v.date >= ?' : ''}
+      ''', filter.where != null ? filter.args : null);
+      for (final r in marginRows) {
+        final qte = (r['quantite'] as num?)?.toDouble() ?? 0;
+        final prix = (r['prix'] as num?)?.toDouble() ?? 0;
+        final remise = (r['remise'] as num?)?.toDouble() ?? 0;
+        final achat = (r['prix_achat'] as num?)?.toDouble() ?? 0;
+        marge += ((prix - achat) * qte) - remise;
+      }
+    } catch (_) {
+      marge = 0;
+    }
+
+    setState(() {
+      _caData.clear();
+      _caData.addAll(caByDay);
+      _caTotal = caTotal;
+      _nbVentes = nbVentes;
+      _panierMoyen = nbVentes == 0 ? 0 : caTotal / nbVentes;
+      _marge = marge;
+      _tauxMarge = caTotal == 0 ? 0 : (marge / caTotal) * 100;
+    });
+  }
+
+  Future<void> _loadTopProduits() async {
+    final db = LocalDatabaseService.instance.db;
+    final filter = _periodeFilter();
+    final rows = await db.rawQuery('''
+      SELECT lv.medicament_id, SUM(lv.quantite) as qte, SUM((lv.prix * lv.quantite) - COALESCE(lv.remise,0)) as ca, m.nom
+      FROM lignes_vente lv
+      JOIN ventes v ON v.id = lv.vente_id
+      LEFT JOIN medicaments m ON m.id = lv.medicament_id
+      ${filter.where != null ? 'WHERE v.date >= ?' : ''}
+      GROUP BY lv.medicament_id
+      ORDER BY qte DESC
+      LIMIT 5
+    ''', filter.where != null ? filter.args : null);
+
+    setState(() {
+      _topProduits
+        ..clear()
+        ..addAll(rows.map((r) => TopProduit(
+              nom: (r['nom'] as String?)?.isNotEmpty == true ? r['nom'] as String : (r['medicament_id'] as String? ?? ''),
+              ventes: (r['qte'] as num?)?.toInt() ?? 0,
+              ca: (r['ca'] as num?)?.toInt() ?? 0,
+            )));
+    });
+  }
+
+  Future<void> _loadFamilles() async {
+    final db = LocalDatabaseService.instance.db;
+    final filter = _periodeFilter();
+    final rows = await db.rawQuery('''
+      SELECT m.famille, SUM((lv.prix * lv.quantite) - COALESCE(lv.remise,0)) as ca
+      FROM lignes_vente lv
+      JOIN ventes v ON v.id = lv.vente_id
+      LEFT JOIN medicaments m ON m.id = lv.medicament_id
+      ${filter.where != null ? 'WHERE v.date >= ?' : ''}
+      GROUP BY m.famille
+      ORDER BY ca DESC
+    ''', filter.where != null ? filter.args : null);
+    final total = rows.fold<num>(0, (sum, r) => sum + ((r['ca'] as num?) ?? 0));
+    setState(() {
+      _familles
+        ..clear()
+        ..addAll(rows.map((r) {
+          final ca = (r['ca'] as num?)?.toInt() ?? 0;
+          final famille = (r['famille'] as String?)?.isNotEmpty == true ? r['famille'] as String : 'Non définie';
+          final pourc = total == 0 ? 0.0 : (ca / total) * 100;
+          return FamilleStats(famille: famille, ca: ca, pourcentage: pourc.toDouble());
+        }));
+    });
+  }
+
+  Future<void> _loadTopVendeurs() async {
+    final db = LocalDatabaseService.instance.db;
+    final filter = _periodeFilter();
+    final rows = await db.rawQuery('''
+      SELECT client_id, SUM(montant) as ca, COUNT(*) as ventes
+      FROM ventes
+      ${filter.where != null ? 'WHERE date >= ?' : ''}
+      GROUP BY client_id
+      ORDER BY ca DESC
+      LIMIT 4
+    ''', filter.where != null ? filter.args : null);
+
+    // Map patient id -> name
+    Map<String, String> patientNames = {};
+    try {
+      final patients = await db.query('patients', columns: ['id', 'name']);
+      patientNames = {for (final p in patients) (p['id'] as String? ?? ''): (p['name'] as String? ?? '')};
+    } catch (_) {
+      patientNames = {};
+    }
+
+    setState(() {
+      _topVendeurs
+        ..clear()
+        ..addAll(rows.map((r) {
+          final id = r['client_id'] as String? ?? '';
+          return TopVendeur(
+            id: id,
+            nom: patientNames[id] ?? id,
+            ventes: (r['ventes'] as num?)?.toInt() ?? 0,
+            ca: (r['ca'] as num?)?.toInt() ?? 0,
+          );
+        }));
+    });
+  }
+
+  String _formatCurrency(double value) {
+    if (value == 0) return '0 FCFA';
+    return '${NumberFormat('#,###', 'fr_FR').format(value)} FCFA';
+  }
+
+  String _growthText(double value) {
+    // Placeholder: growth calculation would require previous period; keep neutral for now.
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeColors.from(context);
+    final accent = Colors.teal;
+
+    return FadeTransition(
+      opacity: _fade,
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text('Erreur: $_error', style: TextStyle(color: palette.text)))
+              : Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(palette, accent),
+                      const SizedBox(height: 24),
+                      _buildPeriodeSelector(palette, accent),
+                      const SizedBox(height: 24),
+                      _buildKpis(palette, accent),
+                      const SizedBox(height: 24),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                                child: IntrinsicHeight(
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(flex: 3, child: _buildGraphiques(palette, accent)),
+                                      const SizedBox(width: 24),
+                                      Expanded(flex: 2, child: _buildClassements(palette, accent)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildHeader(ThemeColors palette, Color accent) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.bar_chart, color: accent, size: 40),
+            const SizedBox(width: 16),
+            Text('Reporting & Statistiques', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: palette.text, letterSpacing: 1.2)),
+          ],
+        ),
+        Text('Analyse complète de l\'activité • CA • Marges • Tendances', style: TextStyle(fontSize: 16, color: palette.subText)),
+      ],
+    );
+  }
+
+  Widget _buildPeriodeSelector(ThemeColors palette, Color accent) {
+    return _card(
+      palette,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Icon(Icons.date_range, color: accent, size: 28),
+            const SizedBox(width: 16),
+            Text('Période :', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+            const SizedBox(width: 20),
+            DropdownButton<String>(
+              value: _periode,
+              items: ['Aujourd\'hui', '7 jours', 'Ce mois', '3 mois', 'Cette année', 'Personnalisé']
+                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                  .toList(),
+              onChanged: (v) {
+                setState(() => _periode = v!);
+                _loadData();
+              },
+              style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
+              dropdownColor: palette.isDark ? Colors.grey[900] : Colors.white,
+              underline: Container(),
+            ),
+            const Spacer(),
+            ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.file_download),
+              label: const Text('Exporter PDF'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.all(16)),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.table_view),
+              label: const Text('Exporter Excel'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.all(16)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKpis(ThemeColors palette, Color accent) {
+    return Row(
+      children: [
+        Expanded(child: _kpiCard('CA Total', _formatCurrency(_caTotal), '${_growthText(_caTotal)}', Icons.trending_up, Colors.green, palette)),
+        const SizedBox(width: 16),
+        Expanded(child: _kpiCard('Panier moyen', _formatCurrency(_panierMoyen), '', Icons.shopping_basket, accent, palette)),
+        const SizedBox(width: 16),
+        Expanded(child: _kpiCard('Taux de marge', '${_tauxMarge.toStringAsFixed(1)}%', '', Icons.pie_chart, Colors.purple, palette)),
+        const SizedBox(width: 16),
+        Expanded(child: _kpiCard('Nombre de ventes', '$_nbVentes', '', Icons.receipt_long, Colors.blue, palette)),
+      ],
+    );
+  }
+
+  Widget _kpiCard(String label, String value, String evolution, IconData icon, Color color, ThemeColors palette) {
+    final isPositive = evolution.startsWith('+');
+    return _card(
+      palette,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color, size: 28)),
+                const Spacer(),
+                Text(evolution, style: TextStyle(color: isPositive ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                Icon(isPositive ? Icons.trending_up : Icons.trending_down, color: isPositive ? Colors.green : Colors.red),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(label, style: TextStyle(color: palette.subText, fontSize: 14)),
+            const SizedBox(height: 8),
+            Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: palette.text)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGraphiques(ThemeColors palette, Color accent) {
+    return Column(
+      children: [
+        _card(palette, child: _graphiqueCA(palette, accent)),
+        const SizedBox(height: 20),
+        _card(palette, child: _graphiqueFamilles(palette)),
+      ],
+    );
+  }
+
+  Widget _graphiqueCA(ThemeColors palette, Color accent) {
+    if (_caData.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('Aucune donnée de CA pour la période', style: TextStyle(color: palette.subText)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.show_chart, color: accent, size: 32),
+              const SizedBox(width: 12),
+              Text('Évolution du CA (2025)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+            ],
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 280,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: _caData.entries.map((e) {
+                final max = _caData.values.reduce((a, b) => a > b ? a : b);
+                final height = max == 0 ? 0.0 : (e.value / max) * 240;
+                return Column(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: height,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [accent, accent.withOpacity(0.6)], begin: Alignment.bottomCenter, end: Alignment.topCenter),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(e.key, style: TextStyle(color: palette.subText, fontSize: 12)),
+                    Text(NumberFormat.compact().format(e.value), style: TextStyle(color: palette.text, fontSize: 11)),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _graphiqueFamilles(ThemeColors palette) {
+    if (_familles.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('Aucune donnée famille pour la période', style: TextStyle(color: palette.subText)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.pie_chart, color: Colors.orange, size: 32),
+              const SizedBox(width: 12),
+              Text('Répartition par famille', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+            ],
+          ),
+          const SizedBox(height: 24),
+          ..._familles.map((f) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                SizedBox(width: 140, child: Text(f.famille, style: TextStyle(color: palette.text, fontWeight: FontWeight.w600))),
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: f.pourcentage / 100,
+                    backgroundColor: palette.divider,
+                    valueColor: AlwaysStoppedAnimation(_couleurFamille(f.famille)),
+                    minHeight: 12,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                SizedBox(width: 80, child: Text('${f.pourcentage.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Color _couleurFamille(String famille) {
+    return switch (famille) {
+      'Antalgiques' => Colors.teal,
+      'Antibiotiques' => Colors.blue,
+      'Gastro' => Colors.orange,
+      'Cardio' => Colors.red,
+      'Dermatologie' => Colors.purple,
+      _ => Colors.grey,
+    };
+  }
+
+  Widget _buildClassements(ThemeColors palette, Color accent) {
+    return Column(
+      children: [
+        _card(palette, child: _topVentes(palette, accent)),
+        const SizedBox(height: 20),
+        _card(palette, child: _meilleursVendeurs(palette, accent)),
+      ],
+    );
+  }
+
+  Widget _topVentes(ThemeColors palette, Color accent) {
+    if (_topProduits.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('Aucun produit vendu sur la période', style: TextStyle(color: palette.subText)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.trending_up, color: Colors.green, size: 32),
+              const SizedBox(width: 12),
+              Text('Top 5 produits', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ..._topProduits.take(5).toList().asMap().entries.map((e) {
+            final index = e.key + 1;
+            final produit = e.value;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: palette.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: index == 1 ? Colors.amber : palette.divider)),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: index == 1 ? Colors.amber : accent.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                    child: Center(child: Text('$index', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: index == 1 ? Colors.black : accent))),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(child: Text(produit.nom, style: TextStyle(fontWeight: FontWeight.w600, color: palette.text))),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${produit.ventes} ventes', style: TextStyle(color: palette.subText, fontSize: 13)),
+                      Text(NumberFormat('#,###', 'fr_FR').format(produit.ca), style: TextStyle(fontWeight: FontWeight.bold, color: accent)),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _meilleursVendeurs(ThemeColors palette, Color accent) {
+    if (_topVendeurs.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('Aucun vendeur / client avec données pour la période', style: TextStyle(color: palette.subText)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.emoji_events, color: Colors.amber, size: 32),
+              const SizedBox(width: 12),
+              Text('Meilleurs vendeurs', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ..._topVendeurs.asMap().entries.map((e) {
+            final i = e.key + 1;
+            final vendeur = e.value;
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: i == 1 ? Colors.amber : accent,
+                child: Text('$i', style: TextStyle(color: i == 1 ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+              ),
+              title: Text(vendeur.nom.isEmpty ? 'Client ${vendeur.id}' : vendeur.nom, style: TextStyle(fontWeight: FontWeight.w600, color: palette.text)),
+              subtitle: Text('${vendeur.ventes} ventes', style: TextStyle(color: palette.subText)),
+              trailing: Text(_formatCurrency(vendeur.ca.toDouble()), style: TextStyle(fontWeight: FontWeight.bold, color: accent)),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _card(ThemeColors palette, {required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: palette.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08), blurRadius: 16, offset: const Offset(0, 6))],
+      ),
+      child: child,
+    );
+  }
+}
+
+// === MODÈLES ===
+class TopProduit {
+  final String nom;
+  final int ventes, ca;
+  const TopProduit({required this.nom, required this.ventes, required this.ca});
+}
+
+class FamilleStats {
+  final String famille;
+  final int ca;
+  final double pourcentage;
+  const FamilleStats({required this.famille, required this.ca, required this.pourcentage});
+}
+
+class TopVendeur {
+  final String id;
+  final String nom;
+  final int ventes;
+  final int ca;
+  const TopVendeur({required this.id, required this.nom, required this.ventes, required this.ca});
+}
+
+class _PeriodeFilter {
+  final String? where;
+  final List<Object?> args;
+  const _PeriodeFilter({required this.where, required this.args});
+}

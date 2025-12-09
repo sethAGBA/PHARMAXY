@@ -1,0 +1,482 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+void main() {
+  runApp(const PharmacyApp());
+}
+
+class PharmacyApp extends StatelessWidget {
+  const PharmacyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'NEXUS Pharma',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0B1020),
+        fontFamily: GoogleFonts.sora().fontFamily,
+        textTheme: TextTheme(
+          bodyMedium: GoogleFonts.sora(color: Colors.white70),
+          titleLarge: GoogleFonts.orbitron(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Colors.cyanAccent,
+            letterSpacing: 2,
+          ),
+        ),
+        useMaterial3: true,
+      ),
+      home: const LoginScreen(),
+    );
+  }
+}
+
+// ==================== ÉCRAN DE CONNEXION FUTURISTE ====================
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _controller.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Fond animé avec particules (simulé)
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0F1629),
+                  Color(0xFF1A2344),
+                  Color(0xFF0B1020),
+                ],
+              ),
+            ),
+          ),
+          Center(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: GlassCard(
+                width: 420,
+                child: Padding(
+                  padding: const EdgeInsets.all(40),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Logo néon
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Colors.cyan, Colors.blueAccent],
+                        ).createShader(bounds),
+                        child: const Icon(
+                          Icons.biotech,
+                          size: 90,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'NEXUS PHARMA',
+                        style: GoogleFonts.orbitron(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          foreground: Paint()
+                            ..shader = const LinearGradient(
+                              colors: [Colors.cyanAccent, Colors.blueAccent],
+                            ).createShader(const Rect.fromLTWH(0, 0, 300, 50)),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      _buildTextField('IDENTIFIANT', Icons.person_outline),
+                      const SizedBox(height: 20),
+                      _buildTextField('MOT DE PASSE', Icons.lock_outline,
+                          obscure: true),
+                      const SizedBox(height: 40),
+                      NeonButton(
+                        text: 'CONNEXION SÉCURISÉE',
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            PageRouteBuilder(
+                              transitionDuration:
+                                  const Duration(milliseconds: 800),
+                              pageBuilder: (_, __, ___) => const MainScreen(),
+                              transitionsBuilder:
+                                  (_, animation, __, child) =>
+                                      FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextField(String label, IconData icon,
+      {bool obscure = false}) {
+    return TextField(
+      obscureText: obscure,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.cyanAccent),
+        prefixIcon: Icon(icon, color: Colors.cyanAccent),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.cyanAccent, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.cyan, width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== MAIN SCREEN + NAVIGATION FUTURISTE ====================
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _selectedIndex = 0;
+
+  final List<Widget> _screens = [
+    const DashboardScreen(),
+    // const SalesScreen(),
+    // const PrescriptionScreen(),
+    // const StockScreen(),
+    // const OrdersScreen(),
+    // const CustomersScreen(),
+    // const ReportsScreen(),
+    // const SettingsScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Row(
+        children: [
+          // Navigation Rail Futuriste
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: 90,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF1E2747), Color(0xFF0B1020)],
+              ),
+            ),
+            child: NavigationRail(
+              backgroundColor: Colors.transparent,
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+              labelType: NavigationRailLabelType.all,
+              selectedLabelTextStyle:
+                  GoogleFonts.orbitron(color: Colors.cyanAccent),
+              unselectedLabelTextStyle:
+                  GoogleFonts.sora(color: Colors.white54),
+              indicatorColor: Colors.cyanAccent.withOpacity(0.3),
+              destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard),
+                  label: Text('Dashboard'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.point_of_sale_outlined),
+                  selectedIcon: Icon(Icons.point_of_sale),
+                  label: Text('Vente'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.medical_services_outlined),
+                  selectedIcon: Icon(Icons.medical_services),
+                  label: Text('Ordo'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.inventory_2_outlined),
+                  selectedIcon: Icon(Icons.inventory_2),
+                  label: Text('Stock'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.shopping_cart_outlined),
+                  selectedIcon: Icon(Icons.shopping_cart),
+                  label: Text('Commandes'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.people_outline),
+                  selectedIcon: Icon(Icons.people),
+                  label: Text('Clients'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.bar_chart_outlined),
+                  selectedIcon: Icon(Icons.bar_chart),
+                  label: Text('Stats'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon: Icon(Icons.settings),
+                  label: Text('Settings'),
+                ),
+              ],
+            ),
+          ),
+          // Contenu principal
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: _screens[_selectedIndex],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== COMPOSANTS RÉUTILISABLES FUTURISTES ====================
+
+// Carte en verre dépoli
+class GlassCard extends StatelessWidget {
+  final Widget child;
+  final double? width;
+  const GlassCard({super.key, required this.child, this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withOpacity(0.1),
+            Colors.white.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Bouton néon
+class NeonButton extends StatelessWidget {
+  final String text;
+  final VoidCallback onPressed;
+  const NeonButton({super.key, required this.text, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Colors.cyanAccent, Colors.blueAccent],
+          ),
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.cyanAccent.withOpacity(0.6),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+
+        child: Center(
+          child: Text(
+            text,
+            style: GoogleFonts.orbitron(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Exemple de Dashboard futuriste (les autres écrans suivent le même style)
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('TABLEAU DE BORD', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 30),
+          Wrap(
+            spacing: 20,
+            runSpacing: 20,
+            children: [
+              _buildMetricCard('CA JOUR', '€12 450', Icons.trending_up, Colors.greenAccent),
+              _buildMetricCard('CLIENTS', '87', Icons.people, Colors.blueAccent),
+              _buildMetricCard('ORDONNANCES', '34', Icons.receipt_long, Colors.orangeAccent),
+              _buildMetricCard('PANIER MOYEN', '€143', Icons.shopping_basket, Colors.purpleAccent),
+            ],
+          ),
+          const SizedBox(height: 30),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: GlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('ALERTES CRITIQUES', style: GoogleFonts.orbitron(fontSize: 18, color: Colors.redAccent)),
+                        const SizedBox(height: 20),
+                        _buildAlert('5 produits en rupture', Icons.warning_amber, Colors.redAccent),
+                        _buildAlert('12 proches péremption', Icons.access_time, Colors.orangeAccent),
+                        _buildAlert('3 commandes en attente', Icons.local_shipping, Colors.cyanAccent),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: GlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('TOP VENTES', style: GoogleFonts.orbitron(fontSize: 18, color: Colors.cyanAccent)),
+                        const SizedBox(height: 20),
+                        _buildTopItem('Doliprane 1000mg', '45'),
+                        _buildTopItem('Efferalgan 500mg', '32'),
+                        _buildTopItem('Spasfon', '28'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+    return GlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title, style: TextStyle(color: Colors.white60, fontSize: 14)),
+                Icon(icon, color: color, size: 28),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(value, style: GoogleFonts.orbitron(fontSize: 32, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlert(String text, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 12),
+          Text(text, style: TextStyle(color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopItem(String name, String qty) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(name, style: const TextStyle(color: Colors.white70)),
+          Text(qty, style: GoogleFonts.orbitron(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
+// Tu peux appliquer exactement le même style (GlassCard, NeonButton, typographie Orbitron/Sora, couleurs néon) à tous les autres écrans : SalesScreen, StockScreen, etc.
