@@ -28,3 +28,13 @@
 - Write concise, imperative commit messages (e.g., `Refactor inventaire layout`, `Fix retours table overflow`).
 - Before opening a PR: run `dart format lib test`, `flutter analyze`, and `flutter test`. Attach screenshots/gifs for UI changes (dashboard, caisse, retours, facturation) and note any theme impacts.
 - Keep PRs focused; describe the feature/screen touched, linked issue/task, and any data/model changes or new configs.
+
+### Quelques pistes utiles à ajouter sur le ticket :
+
+  - Info pharmacie: heures d’ouverture, coordonnées urgences, lien site ou réseaux.
+  - Référence vente: code-barres/QR pointant vers le ticket complet ou une URL SAV.
+  - Fiscalité: détails TVA ou numéro d’identification fiscale.
+  - Politique retour/échange: courte ligne pour clarifier.
+  - Messages santé: rappel posologie/contre-indications si disponibles, ou hotline conseil.
+  - Fidélité: points cumulés ou lien/QR pour rejoindre un programme.
+  - Signature numérique: hash/verif pour authentifier le ticket.

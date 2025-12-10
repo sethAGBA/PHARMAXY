@@ -27,6 +27,7 @@ import 'services/local_database_service.dart';
 import 'widgets/sidebar.dart';
 
 void main() async {
+  
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR', null);
   await _initializeLocalData();
@@ -104,6 +105,7 @@ class _MyAppState extends State<MyApp> {
       valueListenable: themeModeNotifier,
       builder: (context, mode, _) {
         return MaterialApp(
+          debugShowCheckedModeBanner: false,
           title: 'PHARMAXY',
           navigatorKey: navigatorKey,
           themeMode: mode,

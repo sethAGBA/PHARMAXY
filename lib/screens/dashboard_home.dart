@@ -124,32 +124,20 @@ class _DashboardHomeState extends State<DashboardHome>
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF0EA5A4), Color(0xFF10B981)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.12),
-                    blurRadius: 8,
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
                 ],
               ),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Image.asset(
-                    'assets/images/pharmacy_icon.jpg',
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.contain,
-                    color: Colors.white,
-                    colorBlendMode: BlendMode.srcIn,
-                  ),
-                ),
+              clipBehavior: Clip.hardEdge,
+                // Reflect the login screen’s hero image inside the dashboard header.
+                child: Image.asset(
+                'assets/images/pharmacy_icon.jpg',
+                fit: BoxFit.cover,
               ),
             ),
             const SizedBox(width: 14),

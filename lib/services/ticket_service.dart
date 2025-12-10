@@ -27,15 +27,19 @@ class TicketService {
     String? pharmacyPhone,
     String? pharmacyEmail,
     String? pharmacyOrderNumber,
+    String footerMessage = 'Merci de votre confiance. Prompt rétablissement !',
   }) async {
     final pdf = pw.Document();
     final now = DateTime.now();
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(now);
     final header = pw.TextStyle(
       fontSize: 14,
       fontWeight: pw.FontWeight.bold,
     );
     final sub = pw.TextStyle(fontSize: 10, color: PdfColors.grey700);
     final currencyFormatter = NumberFormat('#,##0', 'fr_FR');
+    final qrData =
+        'SALE:$saleId;TOTAL:${currencyFormatter.format(total)} $currency;CLIENT:${client.isNotEmpty ? client : 'Gen'};DATE:$dateStr';
 
     final logo = await _loadLogo(logoPath);
 
@@ -80,7 +84,7 @@ class TicketService {
                   style: sub,
                 ),
               pw.Text('Ticket #$saleId', style: sub),
-              pw.Text('Date: ${DateFormat('dd/MM/yyyy HH:mm').format(now)}', style: sub),
+              pw.Text('Date: $dateStr', style: sub),
               pw.Divider(),
               if (items.isNotEmpty)
                 pw.Table(
@@ -149,6 +153,41 @@ class TicketService {
                     style: header,
                   ),
                 ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Center(
+                child: pw.Column(
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(4),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey400, width: 0.3),
+                        borderRadius: pw.BorderRadius.circular(6),
+                      ),
+                      child: pw.BarcodeWidget(
+                        barcode: pw.Barcode.qrCode(),
+                        data: qrData,
+                        width: 90,
+                        height: 90,
+                        drawText: false,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Scannez pour retrouver le ticket',
+                      style: sub.copyWith(fontSize: 9),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Center(
+                child: pw.Text(
+                  footerMessage,
+                  style: sub.copyWith(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  textAlign: pw.TextAlign.center,
+                ),
               ),
             ],
           );

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:intl/intl.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -7,8 +9,15 @@ import '../services/local_database_service.dart';
 class ProductService {
   ProductService._();
   static final ProductService instance = ProductService._();
+  static final _rng = Random();
 
   final _db = LocalDatabaseService.instance;
+
+  String _generateMovementId() {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final rand = _rng.nextInt(1 << 32);
+    return 'MS-$ts-$rand';
+  }
 
   Future<List<Product>> fetchProductsForSale({String? search}) async {
     final db = _db.db;
@@ -299,7 +308,7 @@ extension StockMovementsMethods on ProductService {
     required String utilisateur,
   }) async {
     final dbExecutor = executor ?? _db.db;
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = _generateMovementId();
     await dbExecutor.insert('mouvements_stocks', {
       'id': id,
       'medicament_id': medicamentId,
