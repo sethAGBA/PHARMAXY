@@ -40,8 +40,14 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
     _nameController = TextEditingController();
     _phoneController = TextEditingController();
@@ -119,13 +125,20 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 Expanded(child: _buildSearchBar(palette)),
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: () => setState(() => _showRegistrationForm = !_showRegistrationForm),
+                  onPressed: () => setState(
+                    () => _showRegistrationForm = !_showRegistrationForm,
+                  ),
                   icon: const Icon(Icons.person_add),
                   label: const Text('Enregistrer'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ],
@@ -149,10 +162,22 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   Expanded(
                     flex: 3,
                     child: _selectedPatient == null
-                        ? Center(child: Text('Sélectionnez un patient pour voir les détails', style: TextStyle(color: palette.subText, fontSize: 18)))
+                        ? Center(
+                            child: Text(
+                              'Sélectionnez un patient pour voir les détails',
+                              style: TextStyle(
+                                color: palette.subText,
+                                fontSize: 18,
+                              ),
+                            ),
+                          )
                         : _isEditMode
-                            ? _buildEditPatientForm(_selectedPatient!, palette)
-                            : _buildFichePatient(_selectedPatient!, palette, accent),
+                        ? _buildEditPatientForm(_selectedPatient!, palette)
+                        : _buildFichePatient(
+                            _selectedPatient!,
+                            palette,
+                            accent,
+                          ),
                   ),
                 ],
               ),
@@ -167,8 +192,19 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Clients / Patients', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: palette.text, letterSpacing: 1.2)),
-        Text('Fiches • Historique • Allergies • Fidélité • Relances', style: TextStyle(fontSize: 16, color: palette.subText)),
+        Text(
+          'Clients / Patients',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: palette.text,
+            letterSpacing: 1.2,
+          ),
+        ),
+        Text(
+          'Fiches • Historique • Allergies • Fidélité • Relances',
+          style: TextStyle(fontSize: 16, color: palette.subText),
+        ),
       ],
     );
   }
@@ -186,8 +222,14 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
             prefixIcon: const Icon(Icons.search),
             filled: true,
             fillColor: palette.isDark ? Colors.grey[850] : Colors.grey[100],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 18,
+            ),
           ),
         ),
       ),
@@ -203,7 +245,14 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Enregistrer un nouveau patient', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+              Text(
+                'Enregistrer un nouveau patient',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: palette.text,
+                ),
+              ),
               const SizedBox(height: 20),
               // Row 1: Nom, Téléphone, Email, Mutuelle
               Row(
@@ -214,7 +263,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _buildFormField('Téléphone', _phoneController, palette),
+                    child: _buildFormField(
+                      'Téléphone',
+                      _phoneController,
+                      palette,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -222,7 +275,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _buildFormField('Mutuelle', _mutuelleController, palette),
+                    child: _buildFormField(
+                      'Mutuelle',
+                      _mutuelleController,
+                      palette,
+                    ),
                   ),
                 ],
               ),
@@ -235,12 +292,20 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _buildFormField('Date de naissance', _dobController, palette),
+                    child: _buildFormField(
+                      'Date de naissance',
+                      _dobController,
+                      palette,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
-                    child: _buildFormField('Allergies', _allergiesController, palette),
+                    child: _buildFormField(
+                      'Allergies',
+                      _allergiesController,
+                      palette,
+                    ),
                   ),
                 ],
               ),
@@ -250,7 +315,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 children: [
                   Expanded(
                     flex: 2,
-                    child: _buildFormField('Contre-indications', _contreIndicationsController, palette),
+                    child: _buildFormField(
+                      'Contre-indications',
+                      _contreIndicationsController,
+                      palette,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Padding(
@@ -261,8 +330,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                       label: const Text('Enregistrer'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -275,19 +349,36 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     );
   }
 
-  Widget _buildFormField(String label, TextEditingController controller, ThemeColors palette) {
+  Widget _buildFormField(
+    String label,
+    TextEditingController controller,
+    ThemeColors palette,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 13, color: palette.subText, fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: palette.subText,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           decoration: InputDecoration(
             filled: true,
             fillColor: palette.isDark ? Colors.grey[800] : Colors.grey[200],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 10,
+            ),
           ),
         ),
       ],
@@ -305,7 +396,12 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     final contreIndications = _contreIndicationsController.text.trim();
 
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez entrer un nom'), backgroundColor: Colors.orange));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez entrer un nom'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
@@ -338,9 +434,16 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
       setState(() => _showRegistrationForm = false);
       await _loadPatients();
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Patient enregistré avec succès'), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Patient enregistré avec succès'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -354,13 +457,20 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     if (_error != null) {
       return _card(
         palette,
-        child: Center(child: Text('Erreur: $_error', style: TextStyle(color: Colors.red))),
+        child: Center(
+          child: Text('Erreur: $_error', style: TextStyle(color: Colors.red)),
+        ),
       );
     }
     if (_filteredPatients.isEmpty) {
       return _card(
         palette,
-        child: Center(child: Text('Aucun patient trouvé', style: TextStyle(color: palette.subText, fontSize: 18))),
+        child: Center(
+          child: Text(
+            'Aucun patient trouvé',
+            style: TextStyle(color: palette.subText, fontSize: 18),
+          ),
+        ),
       );
     }
     return _card(
@@ -369,7 +479,14 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
-            child: Text('${_filteredPatients.length} patients trouvés', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+            child: Text(
+              '${_filteredPatients.length} patients trouvés',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
+            ),
           ),
           const Divider(height: 1),
           Expanded(
@@ -380,22 +497,60 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 final patient = _filteredPatients[index];
                 final isSelected = _selectedPatient == patient;
                 return Container(
-                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  margin: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: isSelected ? accent.withOpacity(0.15) : Colors.transparent,
+                    color: isSelected
+                        ? accent.withOpacity(0.15)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isSelected ? accent : Colors.transparent, width: 2),
+                    border: Border.all(
+                      color: isSelected ? accent : Colors.transparent,
+                      width: 2,
+                    ),
                   ),
                   child: ListTile(
-                    leading: CircleAvatar(backgroundColor: accent, child: Text(patient.nom[0], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                    title: Text(patient.nom, style: TextStyle(fontWeight: FontWeight.bold, color: palette.text)),
-                    subtitle: Text('NIR: ${patient.nir}', style: TextStyle(color: palette.subText)),
+                    leading: CircleAvatar(
+                      backgroundColor: accent,
+                      child: Text(
+                        patient.nom[0],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      patient.nom,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'NIR: ${patient.nir}',
+                      style: TextStyle(color: palette.subText),
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (patient.renouvellementProche) Icon(Icons.notification_important, color: Colors.orange, size: 20),
-                        if (patient.dateProchainVaccin != null) Icon(Icons.vaccines, color: Colors.blue, size: 20),
-                        Text('${patient.pointsFidelite} pts', style: TextStyle(color: accent, fontWeight: FontWeight.bold)),
+                        if (patient.renouvellementProche)
+                          Icon(
+                            Icons.notification_important,
+                            color: Colors.orange,
+                            size: 20,
+                          ),
+                        if (patient.dateProchainVaccin != null)
+                          Icon(Icons.vaccines, color: Colors.blue, size: 20),
+                        Text(
+                          '${patient.pointsFidelite} pts',
+                          style: TextStyle(
+                            color: accent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                     onTap: () => setState(() => _selectedPatient = patient),
@@ -409,7 +564,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     );
   }
 
-  Widget _buildFichePatient(Patient patient, ThemeColors palette, Color accent) {
+  Widget _buildFichePatient(
+    Patient patient,
+    ThemeColors palette,
+    Color accent,
+  ) {
     return _card(
       palette,
       child: SingleChildScrollView(
@@ -419,14 +578,38 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
           children: [
             Row(
               children: [
-                CircleAvatar(radius: 40, backgroundColor: accent, child: Text(patient.nom[0], style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold))),
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: accent,
+                  child: Text(
+                    patient.nom[0],
+                    style: const TextStyle(
+                      fontSize: 32,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 20),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(patient.nom, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: palette.text)),
-                    Text('NIR : ${patient.nir}', style: TextStyle(fontSize: 16, color: palette.subText)),
-                    Text('Dernier achat : ${patient.dateDernierAchat}', style: TextStyle(color: palette.subText)),
+                    Text(
+                      patient.nom,
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
+                    Text(
+                      'NIR : ${patient.nir}',
+                      style: TextStyle(fontSize: 16, color: palette.subText),
+                    ),
+                    Text(
+                      'Dernier achat : ${patient.dateDernierAchat}',
+                      style: TextStyle(color: palette.subText),
+                    ),
                   ],
                 ),
               ],
@@ -438,14 +621,40 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
             const SizedBox(height: 12),
             _infoRow('Téléphone', patient.telephone, Icons.phone, palette),
             _infoRow('Email', patient.email, Icons.email, palette),
-            _infoRow('Mutuelle', patient.mutuelle, Icons.health_and_safety, palette, color: Colors.green),
+            _infoRow(
+              'Mutuelle',
+              patient.mutuelle,
+              Icons.health_and_safety,
+              palette,
+              color: Colors.green,
+            ),
             const SizedBox(height: 24),
 
             // === SANTÉ ===
             _sectionTitle('Santé & Sécurité', Icons.local_hospital, palette),
             const SizedBox(height: 12),
-            _infoRow('Allergies', patient.allergies, Icons.warning_amber_rounded, palette, color: patient.allergies != 'Non renseignées' && patient.allergies != 'Aucune' ? Colors.red : null),
-            _infoRow('Contre-indications', patient.contreIndications, Icons.block, palette, color: patient.contreIndications != 'Non renseignées' && patient.contreIndications != 'Aucune' ? Colors.orange : null),
+            _infoRow(
+              'Allergies',
+              patient.allergies,
+              Icons.warning_amber_rounded,
+              palette,
+              color:
+                  patient.allergies != 'Non renseignées' &&
+                      patient.allergies != 'Aucune'
+                  ? Colors.red
+                  : null,
+            ),
+            _infoRow(
+              'Contre-indications',
+              patient.contreIndications,
+              Icons.block,
+              palette,
+              color:
+                  patient.contreIndications != 'Non renseignées' &&
+                      patient.contreIndications != 'Aucune'
+                  ? Colors.orange
+                  : null,
+            ),
             const SizedBox(height: 24),
 
             // === FIDÉLITÉ & POINTS ===
@@ -453,7 +662,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: accent.withOpacity(0.15), borderRadius: BorderRadius.circular(16), border: Border.all(color: accent.withOpacity(0.4))),
+              decoration: BoxDecoration(
+                color: accent.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: accent.withOpacity(0.4)),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -463,15 +676,37 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Points cumulés', style: TextStyle(color: palette.subText)),
-                          Text('${patient.pointsFidelite}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: accent)),
+                          Text(
+                            'Points cumulés',
+                            style: TextStyle(color: palette.subText),
+                          ),
+                          Text(
+                            '${patient.pointsFidelite}',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: accent,
+                            ),
+                          ),
                         ],
                       ),
                       if (patient.pointsFidelite >= 200)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(30)),
-                          child: const Text('-10% sur prochain achat', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: const Text(
+                            '-10% sur prochain achat',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -485,8 +720,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                         label: const Text('+10 points'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -496,8 +736,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                         label: const Text('+50 points'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -507,8 +752,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                         label: const Text('-10 points'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ],
@@ -519,18 +769,28 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
             const SizedBox(height: 24),
 
             // === RELANCES ===
-            _sectionTitle('Relances & notifications', Icons.notifications_active, palette),
+            _sectionTitle(
+              'Relances & notifications',
+              Icons.notifications_active,
+              palette,
+            ),
             const SizedBox(height: 12),
             _relanceChip('✓ Patient actif', Colors.green),
             const SizedBox(height: 8),
             ElevatedButton.icon(
-              onPressed: () => _setReminder(patient, 'Renouvellement ordonnance'),
+              onPressed: () =>
+                  _setReminder(patient, 'Renouvellement ordonnance'),
               icon: const Icon(Icons.add_alert, size: 18),
               label: const Text('Ajouter rappel: Renouvellement'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -540,8 +800,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
               label: const Text('Ajouter rappel: Visite'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -554,8 +819,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   label: const Text('Modifier'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ],
@@ -582,7 +852,14 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Modifier le patient: ${patient.nom}', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: palette.text)),
+            Text(
+              'Modifier le patient: ${patient.nom}',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
+            ),
             const SizedBox(height: 24),
             // Row 1: Nom, Téléphone, Email, Mutuelle
             Row(
@@ -593,7 +870,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildFormField('Téléphone', _phoneController, palette),
+                  child: _buildFormField(
+                    'Téléphone',
+                    _phoneController,
+                    palette,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -601,7 +882,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildFormField('Mutuelle', _mutuelleController, palette),
+                  child: _buildFormField(
+                    'Mutuelle',
+                    _mutuelleController,
+                    palette,
+                  ),
                 ),
               ],
             ),
@@ -615,7 +900,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   flex: 2,
-                  child: _buildFormField('Allergies', _allergiesController, palette),
+                  child: _buildFormField(
+                    'Allergies',
+                    _allergiesController,
+                    palette,
+                  ),
                 ),
               ],
             ),
@@ -625,7 +914,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
               children: [
                 Expanded(
                   flex: 2,
-                  child: _buildFormField('Contre-indications', _contreIndicationsController, palette),
+                  child: _buildFormField(
+                    'Contre-indications',
+                    _contreIndicationsController,
+                    palette,
+                  ),
                 ),
               ],
             ),
@@ -639,8 +932,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   label: const Text('Enregistrer'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -650,8 +948,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   label: const Text('Annuler'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ],
@@ -672,28 +975,45 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     final contreIndications = _contreIndicationsController.text.trim();
 
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez entrer un nom'), backgroundColor: Colors.orange));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez entrer un nom'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
     try {
       await LocalDatabaseService.instance.init();
       final db = LocalDatabaseService.instance.db;
-      await db.update('patients', {
-        'name': name,
-        'phone': phone,
-        'email': email,
-        'mutuelle': mutuelle,
-        'nir': nir,
-        'allergies': allergies,
-        'contraindications': contreIndications,
-      }, where: 'id = ?', whereArgs: [patient.id ?? '']);
+      await db.update(
+        'patients',
+        {
+          'name': name,
+          'phone': phone,
+          'email': email,
+          'mutuelle': mutuelle,
+          'nir': nir,
+          'allergies': allergies,
+          'contraindications': contreIndications,
+        },
+        where: 'id = ?',
+        whereArgs: [patient.id ?? ''],
+      );
 
       setState(() => _isEditMode = false);
       await _loadPatients();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Patient modifié avec succès'), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Patient modifié avec succès'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -702,14 +1022,26 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
       await LocalDatabaseService.instance.init();
       final db = LocalDatabaseService.instance.db;
       final newPoints = max(0, patient.pointsFidelite + delta);
-      await db.update('patients', {'points': newPoints}, where: 'id = ?', whereArgs: [patient.id ?? '']);
+      await db.update(
+        'patients',
+        {'points': newPoints},
+        where: 'id = ?',
+        whereArgs: [patient.id ?? ''],
+      );
       await _loadPatients();
       if (mounted) {
         final msg = delta > 0 ? '+$delta' : '$delta';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Points mis à jour: $msg'), backgroundColor: Colors.teal));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Points mis à jour: $msg'),
+            backgroundColor: Colors.teal,
+          ),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -745,9 +1077,16 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
           'status': 'active',
         });
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rappel ajouté: $reminderType'), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Rappel ajouté: $reminderType'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -756,12 +1095,25 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
       children: [
         Icon(icon, color: Colors.teal, size: 26),
         const SizedBox(width: 12),
-        Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: palette.text,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _infoRow(String label, String value, IconData icon, ThemeColors palette, {Color? color}) {
+  Widget _infoRow(
+    String label,
+    String value,
+    IconData icon,
+    ThemeColors palette, {
+    Color? color,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -770,7 +1122,15 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
           const SizedBox(width: 12),
           Text(label, style: TextStyle(color: palette.subText, fontSize: 14)),
           const SizedBox(width: 16),
-          Expanded(child: Text(value, style: TextStyle(fontWeight: FontWeight.w600, color: color ?? palette.text))),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: color ?? palette.text,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -780,12 +1140,21 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.4))),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
       child: Row(
         children: [
           Icon(Icons.notifications_active, color: color, size: 20),
           const SizedBox(width: 12),
-          Expanded(child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold))),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
     );
@@ -797,7 +1166,13 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
       decoration: BoxDecoration(
         color: palette.card,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: child,
     );
@@ -806,17 +1181,31 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
 
 class Patient {
   final String? id;
-  final String nom, nir, telephone, email, mutuelle, allergies, contreIndications, dateDernierAchat;
+  final String nom,
+      nir,
+      telephone,
+      email,
+      mutuelle,
+      allergies,
+      contreIndications,
+      dateDernierAchat;
   final int pointsFidelite;
   final String? dateProchainVaccin;
   final bool renouvellementProche;
 
   const Patient({
     this.id,
-    required this.nom, required this.nir, required this.telephone, required this.email,
-    required this.mutuelle, required this.pointsFidelite, required this.allergies,
-    required this.contreIndications, required this.dateDernierAchat,
-    this.dateProchainVaccin, required this.renouvellementProche,
+    required this.nom,
+    required this.nir,
+    required this.telephone,
+    required this.email,
+    required this.mutuelle,
+    required this.pointsFidelite,
+    required this.allergies,
+    required this.contreIndications,
+    required this.dateDernierAchat,
+    this.dateProchainVaccin,
+    required this.renouvellementProche,
   });
 
   factory Patient.fromMap(Map<String, dynamic> map) {
@@ -826,9 +1215,12 @@ class Patient {
     final email = (map['email'] as String?) ?? '';
     final mutuelle = (map['mutuelle'] as String?) ?? '';
     final nir = (map['nir'] as String?) ?? '';
-    final points = (map['points'] is int) ? map['points'] as int : int.tryParse('${map['points']}') ?? 0;
+    final points = (map['points'] is int)
+        ? map['points'] as int
+        : int.tryParse('${map['points']}') ?? 0;
     final allergies = (map['allergies'] as String?) ?? 'Non renseignées';
-    final contraindications = (map['contraindications'] as String?) ?? 'Non renseignées';
+    final contraindications =
+        (map['contraindications'] as String?) ?? 'Non renseignées';
     final created = (map['created_at'] as String?) ?? '';
     String prettyDate;
     try {

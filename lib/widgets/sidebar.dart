@@ -11,6 +11,7 @@ class Sidebar extends StatelessWidget {
     required this.onThemeToggle,
     required this.animationController,
     required this.items,
+    this.onLogout,
   });
 
   final int selectedIndex;
@@ -19,6 +20,7 @@ class Sidebar extends StatelessWidget {
   final ValueChanged<bool> onThemeToggle;
   final AnimationController animationController;
   final List<NavItem> items;
+  final VoidCallback? onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -79,13 +81,20 @@ class Sidebar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: palette.isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.65),
+                color: palette.isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.white.withOpacity(0.65),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: palette.isDark ? Colors.white12 : Colors.black12),
+                border: Border.all(
+                  color: palette.isDark ? Colors.white12 : Colors.black12,
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.brightness_6_outlined, color: palette.isDark ? Colors.white : Colors.black87),
+                  Icon(
+                    Icons.brightness_6_outlined,
+                    color: palette.isDark ? Colors.white : Colors.black87,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -113,15 +122,24 @@ class Sidebar extends StatelessWidget {
               itemBuilder: (context, index) {
                 final item = items[index];
                 final isSelected = selectedIndex == index;
-                final baseColor = palette.isDark ? Colors.white70 : Colors.black54;
-                final selectedColor = palette.isDark ? Colors.white : Colors.black87;
+                final baseColor = palette.isDark
+                    ? Colors.white70
+                    : Colors.black54;
+                final selectedColor = palette.isDark
+                    ? Colors.white
+                    : Colors.black87;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? (palette.isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.08))
+                          ? (palette.isDark
+                                ? Colors.white.withOpacity(0.2)
+                                : Colors.black.withOpacity(0.08))
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: isSelected
@@ -135,12 +153,18 @@ class Sidebar extends StatelessWidget {
                           : [],
                     ),
                     child: ListTile(
-                      leading: Icon(item.icon, color: isSelected ? selectedColor : baseColor, size: 28),
+                      leading: Icon(
+                        item.icon,
+                        color: isSelected ? selectedColor : baseColor,
+                        size: 28,
+                      ),
                       title: Text(
                         item.label,
                         style: TextStyle(
                           color: isSelected ? selectedColor : baseColor,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           fontSize: 16,
                         ),
                       ),
@@ -155,20 +179,32 @@ class Sidebar extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
             child: Container(
               decoration: BoxDecoration(
-                color: palette.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+                color: palette.isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.black.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: palette.isDark ? Colors.white12 : Colors.black12),
+                border: Border.all(
+                  color: palette.isDark ? Colors.white12 : Colors.black12,
+                ),
               ),
               child: ListTile(
-                leading: Icon(Icons.logout, color: palette.isDark ? Colors.white : Colors.black87),
+                leading: Icon(
+                  Icons.logout,
+                  color: palette.isDark ? Colors.white : Colors.black87,
+                ),
                 title: Text(
                   'Déconnexion',
-                  style: TextStyle(color: palette.isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: palette.isDark ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                trailing: Icon(Icons.arrow_forward_ios, color: palette.isDark ? Colors.white54 : Colors.black45, size: 14),
-                onTap: () {
-                  // TODO: implémenter la déconnexion
-                },
+                trailing: Icon(
+                  Icons.arrow_forward_ios,
+                  color: palette.isDark ? Colors.white54 : Colors.black45,
+                  size: 14,
+                ),
+                onTap: onLogout,
               ),
             ),
           ),
@@ -179,8 +215,9 @@ class Sidebar extends StatelessWidget {
 }
 
 class NavItem {
-  const NavItem({required this.icon, required this.label});
+  const NavItem({required this.icon, required this.label, this.id});
 
+  final String? id;
   final IconData icon;
   final String label;
 }

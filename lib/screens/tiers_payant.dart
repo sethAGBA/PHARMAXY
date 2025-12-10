@@ -28,8 +28,14 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
     _loadData();
   }
@@ -65,39 +71,54 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
 
       _lots
         ..clear()
-        ..addAll(factures.map((f) {
-          final date = DateTime.tryParse(f['date'] as String? ?? '') ?? DateTime.now();
-          final statut = (f['statut'] as String?) ?? 'Transmis';
-          final organisme = (f['type'] as String?)?.isNotEmpty == true ? f['type'] as String : 'Organisme';
-          return LotTeletransmission(
-            id: f['id'] as String? ?? '',
-            dateEnvoi: date,
-            nbFeuilles: 1,
-            montant: (f['montant'] as num?)?.toInt() ?? 0,
-            statut: statut,
-            organisme: organisme,
-            motifRejet: statut == 'Rejeté' || statut == 'Retourné' ? 'Détail non fourni' : null,
-          );
-        }));
+        ..addAll(
+          factures.map((f) {
+            final date =
+                DateTime.tryParse(f['date'] as String? ?? '') ?? DateTime.now();
+            final statut = (f['statut'] as String?) ?? 'Transmis';
+            final organisme = (f['type'] as String?)?.isNotEmpty == true
+                ? f['type'] as String
+                : 'Organisme';
+            return LotTeletransmission(
+              id: f['id'] as String? ?? '',
+              dateEnvoi: date,
+              nbFeuilles: 1,
+              montant: (f['montant'] as num?)?.toInt() ?? 0,
+              statut: statut,
+              organisme: organisme,
+              motifRejet: statut == 'Rejeté' || statut == 'Retourné'
+                  ? 'Détail non fourni'
+                  : null,
+            );
+          }),
+        );
 
       _reglements
         ..clear()
-        ..addAll(factures.where((f) {
-          final statut = (f['statut'] as String?) ?? '';
-          return statut.toLowerCase().contains('pay');
-        }).map((f) {
-          final date = DateTime.tryParse(f['date'] as String? ?? '') ?? DateTime.now();
-          final organisme = (f['type'] as String?)?.isNotEmpty == true ? f['type'] as String : 'Organisme';
-          return ReglementTP(
-            id: 'REG-${f['id'] ?? ''}',
-            date: date,
-            organisme: organisme,
-            montant: (f['montant'] as num?)?.toInt() ?? 0,
-            statut: 'Encaissé',
-            lot: f['id'] as String? ?? '',
-            joursRetard: 0,
-          );
-        }));
+        ..addAll(
+          factures
+              .where((f) {
+                final statut = (f['statut'] as String?) ?? '';
+                return statut.toLowerCase().contains('pay');
+              })
+              .map((f) {
+                final date =
+                    DateTime.tryParse(f['date'] as String? ?? '') ??
+                    DateTime.now();
+                final organisme = (f['type'] as String?)?.isNotEmpty == true
+                    ? f['type'] as String
+                    : 'Organisme';
+                return ReglementTP(
+                  id: 'REG-${f['id'] ?? ''}',
+                  date: date,
+                  organisme: organisme,
+                  montant: (f['montant'] as num?)?.toInt() ?? 0,
+                  statut: 'Encaissé',
+                  lot: f['id'] as String? ?? '',
+                  joursRetard: 0,
+                );
+              }),
+        );
 
       setState(() {
         _loading = false;
@@ -142,7 +163,9 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(child: Text('Erreur: $_error', style: TextStyle(color: palette.text)));
+      return Center(
+        child: Text('Erreur: $_error', style: TextStyle(color: palette.text)),
+      );
     }
 
     return FadeTransition(
@@ -182,39 +205,96 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
           children: [
             Icon(Icons.health_and_safety, color: accent, size: 40),
             const SizedBox(width: 16),
-            Text('Tiers payant', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: palette.text, letterSpacing: 1.2)),
+            Text(
+              'Tiers payant',
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+                letterSpacing: 1.2,
+              ),
+            ),
           ],
         ),
-        Text('Télétransmission • Suivi rejets • Règlements • Relances', style: TextStyle(fontSize: 16, color: palette.subText)),
+        Text(
+          'Télétransmission • Suivi rejets • Règlements • Relances',
+          style: TextStyle(fontSize: 16, color: palette.subText),
+        ),
       ],
     );
   }
 
   Widget _buildEmpty(String message, ThemeColors palette) {
     return Expanded(
-      child: Center(child: Text(message, style: TextStyle(color: palette.subText))),
+      child: Center(
+        child: Text(message, style: TextStyle(color: palette.subText)),
+      ),
     );
   }
 
   Widget _buildIndicateurs(ThemeColors palette, Color accent) {
     final totalTransmis = _lots.fold<int>(0, (sum, l) => sum + l.montant);
-    final totalPaye = _reglements.where((r) => r.statut == 'Encaissé').fold<int>(0, (sum, r) => sum + r.montant);
-    final totalImpaye = _reglements.where((r) => r.statut == 'Impayé').fold<int>(0, (sum, r) => sum + r.montant);
+    final totalPaye = _reglements
+        .where((r) => r.statut == 'Encaissé')
+        .fold<int>(0, (sum, r) => sum + r.montant);
+    final totalImpaye = _reglements
+        .where((r) => r.statut == 'Impayé')
+        .fold<int>(0, (sum, r) => sum + r.montant);
 
     return Row(
       children: [
-        Expanded(child: _indicateur('Lots transmis', '${_lots.length}', Icons.send, Colors.blue, palette)),
+        Expanded(
+          child: _indicateur(
+            'Lots transmis',
+            '${_lots.length}',
+            Icons.send,
+            Colors.blue,
+            palette,
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _indicateur('Total transmis', NumberFormat('#,###', 'fr_FR').format(totalTransmis) + ' FCFA', Icons.upload, Colors.teal, palette)),
+        Expanded(
+          child: _indicateur(
+            'Total transmis',
+            NumberFormat('#,###', 'fr_FR').format(totalTransmis) + ' FCFA',
+            Icons.upload,
+            Colors.teal,
+            palette,
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _indicateur('Payé', NumberFormat('#,###', 'fr_FR').format(totalPaye) + ' FCFA', Icons.check_circle, Colors.green, palette, isMain: true)),
+        Expanded(
+          child: _indicateur(
+            'Payé',
+            NumberFormat('#,###', 'fr_FR').format(totalPaye) + ' FCFA',
+            Icons.check_circle,
+            Colors.green,
+            palette,
+            isMain: true,
+          ),
+        ),
         const SizedBox(width: 16),
-        Expanded(child: _indicateur('Impayés', NumberFormat('#,###', 'fr_FR').format(totalImpaye) + ' FCFA', Icons.schedule, Colors.orange, palette)),
+        Expanded(
+          child: _indicateur(
+            'Impayés',
+            NumberFormat('#,###', 'fr_FR').format(totalImpaye) + ' FCFA',
+            Icons.schedule,
+            Colors.orange,
+            palette,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _indicateur(String label, String value, IconData icon, Color color, ThemeColors palette, {bool isMain = false}) {
+  Widget _indicateur(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    ThemeColors palette, {
+    bool isMain = false,
+  }) {
     return _card(
       palette,
       child: Padding(
@@ -224,15 +304,47 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
           children: [
             Row(
               children: [
-                Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color, size: 28)),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
                 const Spacer(),
-                if (isMain) Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: color.withOpacity(0.2), borderRadius: BorderRadius.circular(20)), child: const Text('ACTUEL', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                if (isMain)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'ACTUEL',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
             Text(label, style: TextStyle(color: palette.subText, fontSize: 14)),
             const SizedBox(height: 8),
-            Text(value, style: TextStyle(fontSize: isMain ? 28 : 24, fontWeight: FontWeight.bold, color: palette.text)),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: isMain ? 28 : 24,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
+            ),
           ],
         ),
       ),
@@ -248,13 +360,24 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
           children: [
             Icon(Icons.filter_list, color: accent, size: 24),
             const SizedBox(width: 12),
-            Text('Période :', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: palette.text)),
+            Text(
+              'Période :',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
+            ),
             const SizedBox(width: 16),
             DropdownButton<String>(
               value: _selectedPeriode,
-              items: ['Aujourd\'hui', '7 jours', 'Ce mois', '3 mois', '2025']
-                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                  .toList(),
+              items: [
+                'Aujourd\'hui',
+                '7 jours',
+                'Ce mois',
+                '3 mois',
+                '2025',
+              ].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
               onChanged: (v) {
                 setState(() => _selectedPeriode = v!);
                 _loadData();
@@ -282,14 +405,55 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
         child: Container(
           width: 260,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: palette.card, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(palette.isDark ? 0.2 : 0.04), blurRadius: 8)]),
+          decoration: BoxDecoration(
+            color: palette.card,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(palette.isDark ? 0.2 : 0.04),
+                blurRadius: 8,
+              ),
+            ],
+          ),
           child: Column(
             children: [
-              _onglet('Télétransmission', Icons.send, 'teletransmission', palette, accent, badge: _lots.length),
-              _onglet('Rejets & Retours', Icons.error_outline, 'rejets', palette, Colors.red),
-              _onglet('Règlements', Icons.payment, 'reglements', palette, Colors.green, badge: _reglements.length),
-              _onglet('Relances impayés', Icons.notification_important, 'relances', palette, Colors.orange),
-              _onglet('Rapprochement', Icons.account_balance, 'rapprochement', palette, Colors.blue),
+              _onglet(
+                'Télétransmission',
+                Icons.send,
+                'teletransmission',
+                palette,
+                accent,
+                badge: _lots.length,
+              ),
+              _onglet(
+                'Rejets & Retours',
+                Icons.error_outline,
+                'rejets',
+                palette,
+                Colors.red,
+              ),
+              _onglet(
+                'Règlements',
+                Icons.payment,
+                'reglements',
+                palette,
+                Colors.green,
+                badge: _reglements.length,
+              ),
+              _onglet(
+                'Relances impayés',
+                Icons.notification_important,
+                'relances',
+                palette,
+                Colors.orange,
+              ),
+              _onglet(
+                'Rapprochement',
+                Icons.account_balance,
+                'rapprochement',
+                palette,
+                Colors.blue,
+              ),
             ],
           ),
         ),
@@ -297,7 +461,14 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
     );
   }
 
-  Widget _onglet(String label, IconData icon, String id, ThemeColors palette, Color color, {int? badge}) {
+  Widget _onglet(
+    String label,
+    IconData icon,
+    String id,
+    ThemeColors palette,
+    Color color, {
+    int? badge,
+  }) {
     final actif = _ongletActif == id;
     return InkWell(
       onTap: () => setState(() => _ongletActif = id),
@@ -305,13 +476,46 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: actif ? color.withOpacity(0.15) : Colors.transparent, borderRadius: BorderRadius.circular(12), border: Border.all(color: actif ? color : Colors.transparent, width: 1.5)),
+        decoration: BoxDecoration(
+          color: actif ? color.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: actif ? color : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
         child: Row(
           children: [
             Icon(icon, color: actif ? color : palette.subText, size: 22),
             const SizedBox(width: 14),
-            Expanded(child: Text(label, style: TextStyle(color: actif ? color : palette.text, fontWeight: actif ? FontWeight.bold : FontWeight.w500))),
-            if (badge != null) Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)), child: Text('$badge', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: actif ? color : palette.text,
+                  fontWeight: actif ? FontWeight.bold : FontWeight.w500,
+                ),
+              ),
+            ),
+            if (badge != null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$badge',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -340,7 +544,14 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
               children: [
                 Icon(Icons.send, color: accent, size: 28),
                 const SizedBox(width: 12),
-                Text('Télétransmission des feuilles de soins', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: palette.text)),
+                Text(
+                  'Télétransmission des feuilles de soins',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
               ],
             ),
           ),
@@ -349,7 +560,8 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: _lots.length,
-              itemBuilder: (context, index) => _lotRow(_lots[index], palette, accent),
+              itemBuilder: (context, index) =>
+                  _lotRow(_lots[index], palette, accent),
             ),
           ),
         ],
@@ -369,10 +581,21 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: palette.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.3))),
+      decoration: BoxDecoration(
+        color: palette.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
       child: Row(
         children: [
-          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Icon(Icons.send, color: color)),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.send, color: color),
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -380,23 +603,49 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
               children: [
                 Row(
                   children: [
-                    Text(lot.id, style: TextStyle(fontWeight: FontWeight.bold, color: palette.text)),
+                    Text(
+                      lot.id,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
                     const SizedBox(width: 12),
                     _badge(lot.statut, color),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('${lot.nbFeuilles} feuilles • ${lot.organisme}', style: TextStyle(color: palette.subText)),
-                if (lot.motifRejet != null) Text('Motif : ${lot.motifRejet}', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+                Text(
+                  '${lot.nbFeuilles} feuilles • ${lot.organisme}',
+                  style: TextStyle(color: palette.subText),
+                ),
+                if (lot.motifRejet != null)
+                  Text(
+                    'Motif : ${lot.motifRejet}',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(DateFormat('dd/MM/yyyy HH:mm').format(lot.dateEnvoi), style: TextStyle(color: palette.subText)),
+              Text(
+                DateFormat('dd/MM/yyyy HH:mm').format(lot.dateEnvoi),
+                style: TextStyle(color: palette.subText),
+              ),
               const SizedBox(height: 8),
-              Text(NumberFormat('#,###', 'fr_FR').format(lot.montant) + ' FCFA', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: accent)),
+              Text(
+                NumberFormat('#,###', 'fr_FR').format(lot.montant) + ' FCFA',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: accent,
+                ),
+              ),
             ],
           ),
         ],
@@ -407,18 +656,61 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
   Widget _badge(String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.5))),
-      child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+      ),
     );
   }
 
   // === Les autres onglets (rejets, règlements, relances, rapprochement) ===
   // (identiques en structure, je les laisse courts pour ne pas surcharger)
 
-  Widget _buildRejets(ThemeColors palette) => _card(palette, child: const Center(child: Text('Gestion des rejets et retours — à venir', style: TextStyle(fontSize: 18, color: Colors.grey))));
-  Widget _buildReglements(ThemeColors palette, Color accent) => _card(palette, child: const Center(child: Text('Suivi des règlements — à venir', style: TextStyle(fontSize: 18, color: Colors.grey))));
-  Widget _buildRelances(ThemeColors palette) => _card(palette, child: const Center(child: Text('Relances impayés — à venir', style: TextStyle(fontSize: 18, color: Colors.grey))));
-  Widget _buildRapprochement(ThemeColors palette) => _card(palette, child: const Center(child: Text('Rapprochement bancaire tiers payant — à venir', style: TextStyle(fontSize: 18, color: Colors.grey))));
+  Widget _buildRejets(ThemeColors palette) => _card(
+    palette,
+    child: const Center(
+      child: Text(
+        'Gestion des rejets et retours — à venir',
+        style: TextStyle(fontSize: 18, color: Colors.grey),
+      ),
+    ),
+  );
+  Widget _buildReglements(ThemeColors palette, Color accent) => _card(
+    palette,
+    child: const Center(
+      child: Text(
+        'Suivi des règlements — à venir',
+        style: TextStyle(fontSize: 18, color: Colors.grey),
+      ),
+    ),
+  );
+  Widget _buildRelances(ThemeColors palette) => _card(
+    palette,
+    child: const Center(
+      child: Text(
+        'Relances impayés — à venir',
+        style: TextStyle(fontSize: 18, color: Colors.grey),
+      ),
+    ),
+  );
+  Widget _buildRapprochement(ThemeColors palette) => _card(
+    palette,
+    child: const Center(
+      child: Text(
+        'Rapprochement bancaire tiers payant — à venir',
+        style: TextStyle(fontSize: 18, color: Colors.grey),
+      ),
+    ),
+  );
 
   Widget _card(ThemeColors palette, {required Widget child}) {
     return Container(
@@ -426,7 +718,13 @@ class _TiersPayantScreenState extends State<TiersPayantScreen>
       decoration: BoxDecoration(
         color: palette.card,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: child,
     );
@@ -439,7 +737,15 @@ class LotTeletransmission {
   final DateTime dateEnvoi;
   final int nbFeuilles, montant;
   final String? motifRejet;
-  const LotTeletransmission({required this.id, required this.dateEnvoi, required this.nbFeuilles, required this.montant, required this.statut, required this.organisme, this.motifRejet});
+  const LotTeletransmission({
+    required this.id,
+    required this.dateEnvoi,
+    required this.nbFeuilles,
+    required this.montant,
+    required this.statut,
+    required this.organisme,
+    this.motifRejet,
+  });
 }
 
 class ReglementTP {
@@ -447,7 +753,15 @@ class ReglementTP {
   final DateTime date;
   final int montant;
   final int? joursRetard;
-  const ReglementTP({required this.id, required this.date, required this.organisme, required this.montant, required this.statut, required this.lot, this.joursRetard});
+  const ReglementTP({
+    required this.id,
+    required this.date,
+    required this.organisme,
+    required this.montant,
+    required this.statut,
+    required this.lot,
+    this.joursRetard,
+  });
 }
 
 class _PeriodeFilter {

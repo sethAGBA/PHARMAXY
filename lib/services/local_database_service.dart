@@ -4,6 +4,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/app_user.dart';
+import '../models/caisse_settings.dart';
+import '../models/app_settings.dart';
 
 /// SQLite-backed local database service (offline-first).
 class LocalDatabaseService {
@@ -18,7 +20,7 @@ class LocalDatabaseService {
     final dbPath = p.join(dir.path, 'pharmaxy.db');
     _db = await openDatabase(
       dbPath,
-      version: 8,
+      version: 17,
       onCreate: (db, version) async {
         await _createSchema(db);
       },
@@ -26,10 +28,21 @@ class LocalDatabaseService {
         if (oldVersion < 2) await _migrateV2(db);
         if (oldVersion < 3) await _migrateV3(db);
         if (oldVersion < 4) await _migrateV4(db);
-        if (oldVersion < 5) await _migrateV4(db); // repeat to ensure table exists
+        if (oldVersion < 5) {
+          await _migrateV4(db); // repeat to ensure table exists
+        }
         if (oldVersion < 6) await _migrateV6(db);
         if (oldVersion < 7) await _migrateV7(db);
         if (oldVersion < 8) await _migrateV8(db);
+        if (oldVersion < 9) await _migrateV9(db);
+        if (oldVersion < 10) await _migrateV10(db);
+        if (oldVersion < 11) await _migrateV11(db);
+        if (oldVersion < 12) await _migrateV12(db);
+        if (oldVersion < 13) await _migrateV13(db);
+        if (oldVersion < 14) await _migrateV14(db);
+        if (oldVersion < 15) await _migrateV15(db);
+        if (oldVersion < 16) await _migrateV16(db);
+        if (oldVersion < 17) await _migrateV17(db);
       },
     );
     await _seedDemoData();
@@ -51,6 +64,80 @@ class LocalDatabaseService {
     );
   }
 
+  Future<void> updateUser(AppUser user) async {
+    await db.update(
+      'utilisateurs',
+      user.toMap(),
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
+  }
+
+  Future<void> deleteUser(String id) async {
+    await db.delete('utilisateurs', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<AppSettings> getSettings() async {
+    final rows = await db.query('parametres');
+    final map = {
+      for (final row in rows)
+        (row['cle'] as String): (row['valeur'] as String?) ?? '',
+    };
+    return AppSettings(
+      currency: map['currency'] ?? 'XOF',
+      logoPath: map['logoPath'] ?? '',
+      pharmacyName: map['pharmacy_name'] ?? 'Pharmacie PHARMAXY',
+      pharmacyAddress: map['pharmacy_address'] ?? '',
+      pharmacyPhone: map['pharmacy_phone'] ?? '',
+      pharmacyEmail: map['pharmacy_email'] ?? '',
+      pharmacyOrderNumber: map['pharmacy_order_number'] ?? '',
+    );
+  }
+
+  Future<void> saveSettings(AppSettings settings) async {
+    await _upsertParameter('currency', settings.currency);
+    await _upsertParameter('logoPath', settings.logoPath);
+    await _upsertParameter('pharmacy_name', settings.pharmacyName);
+    await _upsertParameter('pharmacy_address', settings.pharmacyAddress);
+    await _upsertParameter('pharmacy_phone', settings.pharmacyPhone);
+    await _upsertParameter('pharmacy_email', settings.pharmacyEmail);
+    await _upsertParameter(
+      'pharmacy_order_number',
+      settings.pharmacyOrderNumber,
+    );
+  }
+
+  Future<void> _upsertParameter(String key, String value) async {
+    await db.insert('parametres', {
+      'cle': key,
+      'valeur': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<CaisseSettings> getCaisseSettings() async {
+    final rows = await db.query(
+      'parametres',
+      where: 'cle = ?',
+      whereArgs: ['caisse'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return CaisseSettings.defaults();
+    final value = rows.first['valeur'] as String? ?? '';
+    if (value.isEmpty) return CaisseSettings.defaults();
+    try {
+      return CaisseSettings.fromJsonString(value);
+    } catch (_) {
+      return CaisseSettings.defaults();
+    }
+  }
+
+  Future<void> saveCaisseSettings(CaisseSettings settings) async {
+    await db.insert('parametres', {
+      'cle': 'caisse',
+      'valeur': settings.toJsonString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   Future<void> _createSchema(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS utilisateurs (
@@ -61,7 +148,16 @@ class LocalDatabaseService {
         role TEXT,
         created_at TEXT,
         last_login TEXT,
-        is_active INTEGER
+        is_active INTEGER,
+        two_factor_enabled INTEGER DEFAULT 1,
+        totp_secret TEXT,
+        allowed_screens TEXT
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS parametres (
+        cle TEXT PRIMARY KEY,
+        valeur TEXT
       );
     ''');
     await db.execute('''
@@ -134,6 +230,9 @@ class LocalDatabaseService {
         montant REAL,
         mode TEXT,
         client_id TEXT,
+        vendeur TEXT,
+        cancellation_reason TEXT,
+        details TEXT,
         type TEXT,
         statut TEXT
       );
@@ -203,6 +302,26 @@ class LocalDatabaseService {
         id TEXT PRIMARY KEY,
         commande_id TEXT,
         date TEXT,
+        statut TEXT
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS retours (
+        id TEXT PRIMARY KEY,
+        numero TEXT,
+        type TEXT,
+        date TEXT,
+        entity_id TEXT,
+        entity_name TEXT,
+        product_id TEXT,
+        product_name TEXT,
+        lot TEXT,
+        commande_date TEXT,
+        quantite INTEGER,
+        montant REAL,
+        motif TEXT,
+        commentaire TEXT,
+        declared_by TEXT,
         statut TEXT
       );
     ''');
@@ -289,6 +408,49 @@ class LocalDatabaseService {
         date TEXT
       );
     ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS inventaires (
+        id TEXT PRIMARY KEY,
+        date TEXT,
+        type TEXT,
+        responsable TEXT,
+        statut TEXT,
+        nb_produits INTEGER,
+        ecart_qte INTEGER,
+        ecart_valeur INTEGER
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS inventaire_lignes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        inventaire_id TEXT,
+        medicament_id TEXT,
+        code TEXT,
+        nom TEXT,
+        qty_theorique INTEGER,
+        qty_reelle INTEGER,
+        prix_achat INTEGER,
+        prix_vente INTEGER,
+        lot TEXT,
+        peremption TEXT,
+        categorie TEXT,
+        emplacement TEXT,
+        date_ajout TEXT
+      );
+    ''');
+    final userCols = await db.rawQuery("PRAGMA table_info('utilisateurs')");
+    final userNames =
+        userCols.map((c) => (c['name'] as String?) ?? '').toSet();
+    if (!userNames.contains('two_factor_enabled')) {
+      await db.execute(
+        'ALTER TABLE utilisateurs ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0;',
+      );
+    }
+    if (!userNames.contains('totp_secret')) {
+      await db.execute(
+        'ALTER TABLE utilisateurs ADD COLUMN totp_secret TEXT;',
+      );
+    }
   }
 
   Future<void> _migrateV2(Database db) async {
@@ -296,8 +458,12 @@ class LocalDatabaseService {
     await db.execute('ALTER TABLE medicaments ADD COLUMN sku TEXT;');
     await db.execute('ALTER TABLE medicaments ADD COLUMN type TEXT;');
     await db.execute('ALTER TABLE medicaments ADD COLUMN statut TEXT;');
-    await db.execute('ALTER TABLE medicaments ADD COLUMN ordonnance INTEGER DEFAULT 0;');
-    await db.execute('ALTER TABLE medicaments ADD COLUMN controle INTEGER DEFAULT 0;');
+    await db.execute(
+      'ALTER TABLE medicaments ADD COLUMN ordonnance INTEGER DEFAULT 0;',
+    );
+    await db.execute(
+      'ALTER TABLE medicaments ADD COLUMN controle INTEGER DEFAULT 0;',
+    );
     await db.execute('ALTER TABLE medicaments ADD COLUMN description TEXT;');
     await db.execute('ALTER TABLE medicaments ADD COLUMN fournisseur TEXT;');
     await db.execute('ALTER TABLE medicaments ADD COLUMN localisation TEXT;');
@@ -307,7 +473,9 @@ class LocalDatabaseService {
   }
 
   Future<void> _migrateV3(Database db) async {
-    await db.execute('ALTER TABLE medicaments ADD COLUMN conditionnement TEXT;');
+    await db.execute(
+      'ALTER TABLE medicaments ADD COLUMN conditionnement TEXT;',
+    );
   }
 
   Future<void> _migrateV4(Database db) async {
@@ -388,6 +556,13 @@ class LocalDatabaseService {
         note TEXT
       );
     ''');
+    final venteCols = await db.rawQuery("PRAGMA table_info('ventes')");
+    final venteNames = venteCols
+        .map((c) => (c['name'] as String?) ?? '')
+        .toSet();
+    if (!venteNames.contains('details')) {
+      await db.execute('ALTER TABLE ventes ADD COLUMN details TEXT;');
+    }
     final cols = await db.rawQuery("PRAGMA table_info('commandes')");
     final names = cols.map((c) => (c['name'] as String?) ?? '').toSet();
     if (!names.contains('auteur')) {
@@ -397,7 +572,9 @@ class LocalDatabaseService {
       await db.execute('ALTER TABLE commandes ADD COLUMN notes TEXT;');
     }
     final patientCols = await db.rawQuery("PRAGMA table_info('patients')");
-    final patientNames = patientCols.map((c) => (c['name'] as String?) ?? '').toSet();
+    final patientNames = patientCols
+        .map((c) => (c['name'] as String?) ?? '')
+        .toSet();
     if (!patientNames.contains('date_of_birth')) {
       await db.execute('ALTER TABLE patients ADD COLUMN date_of_birth TEXT;');
     }
@@ -408,7 +585,158 @@ class LocalDatabaseService {
       await db.execute('ALTER TABLE patients ADD COLUMN allergies TEXT;');
     }
     if (!patientNames.contains('contraindications')) {
-      await db.execute('ALTER TABLE patients ADD COLUMN contraindications TEXT;');
+      await db.execute(
+        'ALTER TABLE patients ADD COLUMN contraindications TEXT;',
+      );
+    }
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS retours (
+        id TEXT PRIMARY KEY,
+        numero TEXT,
+        type TEXT,
+        date TEXT,
+        entity_id TEXT,
+        entity_name TEXT,
+        product_id TEXT,
+        product_name TEXT,
+        lot TEXT,
+        commande_date TEXT,
+        quantite INTEGER,
+        montant REAL,
+        motif TEXT,
+        commentaire TEXT,
+        declared_by TEXT,
+        statut TEXT
+      );
+    ''');
+  }
+
+  Future<void> _migrateV9(Database db) async {
+    try {
+      await db.execute(
+        'ALTER TABLE utilisateurs ADD COLUMN allowed_screens TEXT;',
+      );
+    } catch (_) {
+      // Column already exists
+    }
+  }
+
+  Future<void> _migrateV10(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS parametres (
+        cle TEXT PRIMARY KEY,
+        valeur TEXT
+      );
+    ''');
+  }
+
+  Future<void> _migrateV12(Database db) async {
+    final cols = await db.rawQuery("PRAGMA table_info('ventes')");
+    final names = cols.map((c) => (c['name'] as String?) ?? '').toSet();
+    if (!names.contains('vendeur')) {
+      await db.execute('ALTER TABLE ventes ADD COLUMN vendeur TEXT;');
+    }
+    if (!names.contains('cancellation_reason')) {
+      await db.execute(
+        'ALTER TABLE ventes ADD COLUMN cancellation_reason TEXT;',
+      );
+    }
+  }
+
+  Future<void> _migrateV11(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS parametres (
+        cle TEXT PRIMARY KEY,
+        valeur TEXT
+      );
+    ''');
+  }
+
+  Future<void> _migrateV13(Database db) async {
+    final cols = await db.rawQuery("PRAGMA table_info('ventes')");
+    final names = cols.map((c) => (c['name'] as String?) ?? '').toSet();
+    if (!names.contains('details')) {
+      await db.execute('ALTER TABLE ventes ADD COLUMN details TEXT;');
+    }
+  }
+
+  Future<void> _migrateV14(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS inventaires (
+        id TEXT PRIMARY KEY,
+        date TEXT,
+        type TEXT,
+        responsable TEXT,
+        statut TEXT,
+        nb_produits INTEGER,
+        ecart_qte INTEGER,
+        ecart_valeur INTEGER
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS inventaire_lignes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        inventaire_id TEXT,
+        medicament_id TEXT,
+        code TEXT,
+        nom TEXT,
+        qty_theorique INTEGER,
+        qty_reelle INTEGER,
+        prix_achat INTEGER,
+        prix_vente INTEGER,
+        lot TEXT,
+        peremption TEXT,
+        categorie TEXT,
+        emplacement TEXT,
+        date_ajout TEXT
+      );
+    ''');
+  }
+
+  Future<void> _migrateV15(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS retours (
+        id TEXT PRIMARY KEY,
+        numero TEXT,
+        type TEXT,
+        date TEXT,
+        entity_id TEXT,
+        entity_name TEXT,
+        product_id TEXT,
+        product_name TEXT,
+        lot TEXT,
+        commande_date TEXT,
+        quantite INTEGER,
+        montant REAL,
+        motif TEXT,
+        commentaire TEXT,
+        declared_by TEXT,
+        statut TEXT
+      );
+    ''');
+  }
+
+  Future<void> _migrateV16(Database db) async {
+    final cols = await db.rawQuery("PRAGMA table_info('utilisateurs')");
+    final names = cols
+        .map((c) => (c['name'] as String?) ?? '')
+        .toSet();
+    if (!names.contains('two_factor_enabled')) {
+      await db.execute(
+        'ALTER TABLE utilisateurs ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 1;',
+      );
+    }
+  }
+
+  Future<void> _migrateV17(Database db) async {
+    final cols = await db.rawQuery("PRAGMA table_info('utilisateurs')");
+    final names = cols
+        .map((c) => (c['name'] as String?) ?? '')
+        .toSet();
+    if (!names.contains('totp_secret')) {
+      await db.execute(
+        'ALTER TABLE utilisateurs ADD COLUMN totp_secret TEXT;',
+      );
     }
   }
 
@@ -447,7 +775,11 @@ class LocalDatabaseService {
 
   Future<void> _seedDemoData() async {
     // Seed users
-    final userCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM utilisateurs')) ?? 0;
+    final userCount =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM utilisateurs'),
+        ) ??
+        0;
     if (userCount == 0) {
       await insertUser(
         AppUser(
@@ -459,8 +791,21 @@ class LocalDatabaseService {
           createdAt: DateTime.now(),
           lastLogin: DateTime.now(),
           isActive: true,
+          twoFactorEnabled: false,
+          totpSecret: null,
+          allowedScreens: const [],
         ),
       );
+    }
+
+    // Seed settings
+    final settingsCount =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM parametres'),
+        ) ??
+        0;
+    if (settingsCount == 0) {
+      await saveSettings(AppSettings.defaults());
     }
 
     // Seed patients — disabled: let users create their own patients

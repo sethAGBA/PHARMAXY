@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +11,9 @@ class SalesChartCard extends StatelessWidget {
     required this.subTextColor,
     required this.dividerColor,
     this.height = 360,
+    required this.spots,
+    required this.labels,
+    this.title = 'Évolution des Ventes',
   });
 
   final Color cardColor;
@@ -16,6 +21,9 @@ class SalesChartCard extends StatelessWidget {
   final Color subTextColor;
   final Color dividerColor;
   final double height;
+  final List<FlSpot> spots;
+  final List<String> labels;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +44,7 @@ class SalesChartCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Évolution des Ventes',
+            title,
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -65,28 +73,36 @@ class SalesChartCard extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
-                        const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin'];
+                        final idx = value.toInt();
+                        final label = idx >= 0 && idx < labels.length
+                            ? labels[idx]
+                            : '';
                         return Text(
-                          months[value.toInt() % months.length],
+                          label,
                           style: TextStyle(color: subTextColor, fontSize: 12),
                         );
                       },
                     ),
                   ),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                 ),
-                borderData: FlBorderData(show: true, border: Border.all(color: dividerColor)),
+                borderData: FlBorderData(
+                  show: true,
+                  border: Border.all(color: dividerColor),
+                ),
+                minY: 0,
+                maxY: math.max(
+                  1,
+                  spots.isNotEmpty ? spots.map((s) => s.y).reduce(math.max) : 0,
+                ),
                 lineBarsData: [
                   LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 450000),
-                      FlSpot(1, 520000),
-                      FlSpot(2, 580000),
-                      FlSpot(3, 620000),
-                      FlSpot(4, 710000),
-                      FlSpot(5, 800000),
-                    ],
+                    spots: spots.isEmpty ? const [FlSpot(0, 0)] : spots,
                     isCurved: true,
                     color: const Color(0xFF10B981),
                     barWidth: 4,

@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
 
 class Product {
+  final String id;
   final String name;
   final String barcode;
   final double price;
   final String category;
+  final int availableStock;
 
-  const Product(this.name, this.barcode, this.price, this.category);
+  const Product({
+    required this.id,
+    required this.name,
+    required this.barcode,
+    required this.price,
+    required this.category,
+    this.availableStock = 0,
+  });
 }
 
 class CartItem {
+  final String? productId;
   final String name;
   final String barcode;
   final double price;
@@ -17,12 +27,35 @@ class CartItem {
   int quantity;
 
   CartItem({
+    this.productId,
     required this.name,
     required this.barcode,
     required this.price,
     required this.category,
     required this.quantity,
   });
+
+  Map<String, Object?> toMap() {
+    return {
+      'product_id': productId,
+      'name': name,
+      'barcode': barcode,
+      'price': price,
+      'category': category,
+      'quantity': quantity,
+    };
+  }
+
+  factory CartItem.fromMap(Map<String, Object?> map) {
+    return CartItem(
+      productId: map['product_id'] as String?,
+      name: map['name'] as String? ?? '',
+      barcode: map['barcode'] as String? ?? '',
+      price: (map['price'] as num?)?.toDouble() ?? 0,
+      category: map['category'] as String? ?? '',
+      quantity: (map['quantity'] as num?)?.toInt() ?? 1,
+    );
+  }
 }
 
 class SaleRecord {
@@ -31,6 +64,10 @@ class SaleRecord {
   final double total;
   final String paymentMethod;
   final String? customer;
+  final String? vendor;
+  final String status;
+  final String? cancellationReason;
+  final List<CartItem> items;
 
   const SaleRecord({
     required this.id,
@@ -38,6 +75,10 @@ class SaleRecord {
     required this.total,
     required this.paymentMethod,
     this.customer,
+    this.vendor,
+    this.status = 'Réglée',
+    this.cancellationReason,
+    this.items = const [],
   });
 }
 
@@ -68,10 +109,11 @@ class StockMovement {
     required this.user,
   });
 
-  String get formattedDate => '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  
+  String get formattedDate =>
+      '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+
   String get displayType {
-    return switch(type) {
+    return switch (type) {
       'entree' => '📥 Entrée',
       'sortie' => '📤 Sortie',
       'ajustement' => '⚙️ Ajustement',
@@ -81,7 +123,7 @@ class StockMovement {
   }
 
   String get displayReason {
-    return switch(reason) {
+    return switch (reason) {
       'achat' => 'Achat fournisseur',
       'vente' => 'Vente caisse',
       'inventaire' => 'Inventaire',
@@ -94,7 +136,7 @@ class StockMovement {
   }
 
   Color get typeColor {
-    return switch(type) {
+    return switch (type) {
       'entree' => const Color(0xFF10B981),
       'sortie' => const Color(0xFFEF4444),
       'ajustement' => const Color(0xFFF59E0B),

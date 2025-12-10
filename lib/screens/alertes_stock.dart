@@ -34,8 +34,14 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
     _loadAlerts();
   }
@@ -49,9 +55,13 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
 
   List<AlertItem> get _filteredAlerts {
     return _alerts.where((item) {
-      final matchesSearch = item.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+      final matchesSearch =
+          item.name.toLowerCase().contains(
+            _searchController.text.toLowerCase(),
+          ) ||
           item.code.contains(_searchController.text);
-      final matchesType = _selectedType == 'Toutes' || item.type == _selectedType;
+      final matchesType =
+          _selectedType == 'Toutes' || item.type == _selectedType;
       final matchesLab = _selectedLab == 'Tous' || item.lab == _selectedLab;
       return matchesSearch && matchesType && matchesLab;
     }).toList();
@@ -85,11 +95,19 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
                         children: [
                           Text(
                             '${_filteredAlerts.length} alertes actives',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: palette.text,
+                            ),
                           ),
                           Text(
                             'Valeur impactée : ${_filteredAlerts.fold<int>(0, (sum, i) => sum + i.valeur).toString()} FCFA',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: accent),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: accent,
+                            ),
                           ),
                         ],
                       ),
@@ -97,16 +115,27 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
                     const Divider(height: 1),
                     Expanded(
                       child: _loading
-                          ? Center(child: CircularProgressIndicator(color: accent))
+                          ? Center(
+                              child: CircularProgressIndicator(color: accent),
+                            )
                           : _error != null
-                              ? Center(child: Text('Erreur: $_error'))
-                              : _filteredAlerts.isEmpty
-                                  ? Center(child: Text('Aucune alerte trouvée', style: TextStyle(color: palette.subText)))
-                                  : ListView.builder(
-                                      padding: const EdgeInsets.all(16),
-                                      itemCount: _filteredAlerts.length,
-                                      itemBuilder: (context, index) => _alertCard(_filteredAlerts[index], palette, accent),
-                                    ),
+                          ? Center(child: Text('Erreur: $_error'))
+                          : _filteredAlerts.isEmpty
+                          ? Center(
+                              child: Text(
+                                'Aucune alerte trouvée',
+                                style: TextStyle(color: palette.subText),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _filteredAlerts.length,
+                              itemBuilder: (context, index) => _alertCard(
+                                _filteredAlerts[index],
+                                palette,
+                                accent,
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -126,50 +155,53 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
     try {
       final entries = await ProductService.instance.fetchStockEntries();
       final now = DateTime.now();
-      final List<AlertItem> list = entries.map((e) {
-        final total = e.qtyOfficine + e.qtyReserve;
-        String type;
-        final peremp = e.peremption;
-        bool isPerime = false;
-        if (peremp.isNotEmpty) {
-          try {
-            final dt = DateFormat('MM/yyyy').parse(peremp);
-            // parse returns first day of month - treat as end of month
-            final endOfMonth = DateTime(dt.year, dt.month + 1, 0);
-            if (endOfMonth.isBefore(now)) isPerime = true;
-          } catch (_) {}
-        }
-        if (total <= 0) {
-          type = 'Rupture';
-        } else if (isPerime) {
-          type = 'Périmé';
-        } else if (total < e.seuil) {
-          type = 'Sous seuil';
-        } else {
-          type = 'OK';
-        }
+      final List<AlertItem> list = entries
+          .map((e) {
+            final total = e.qtyOfficine + e.qtyReserve;
+            String type;
+            final peremp = e.peremption;
+            bool isPerime = false;
+            if (peremp.isNotEmpty) {
+              try {
+                final dt = DateFormat('MM/yyyy').parse(peremp);
+                // parse returns first day of month - treat as end of month
+                final endOfMonth = DateTime(dt.year, dt.month + 1, 0);
+                if (endOfMonth.isBefore(now)) isPerime = true;
+              } catch (_) {}
+            }
+            if (total <= 0) {
+              type = 'Rupture';
+            } else if (isPerime) {
+              type = 'Périmé';
+            } else if (total < e.seuil) {
+              type = 'Sous seuil';
+            } else {
+              type = 'OK';
+            }
 
-        final valeur = total * e.prixVente;
-        final actions = type == 'Rupture'
-            ? ['commande', 'retrait']
-            : type == 'Sous seuil'
+            final valeur = total * e.prixVente;
+            final actions = type == 'Rupture'
+                ? ['commande', 'retrait']
+                : type == 'Sous seuil'
                 ? ['commande']
                 : type == 'Périmé'
-                    ? ['retrait', 'declassement']
-                    : <String>[];
+                ? ['retrait', 'declassement']
+                : <String>[];
 
-        return AlertItem(
-          name: e.name,
-          code: e.cip,
-          type: type,
-          lab: e.lab,
-          seuil: e.seuil,
-          stock: total,
-          peremption: e.peremption,
-          valeur: valeur,
-          actions: actions,
-        );
-      }).where((a) => a.type != 'OK').toList();
+            return AlertItem(
+              name: e.name,
+              code: e.cip,
+              type: type,
+              lab: e.lab,
+              seuil: e.seuil,
+              stock: total,
+              peremption: e.peremption,
+              valeur: valeur,
+              actions: actions,
+            );
+          })
+          .where((a) => a.type != 'OK')
+          .toList();
 
       // build filter lists
       final types = <String>{'Toutes'};
@@ -197,8 +229,19 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Alertes stock', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: palette.text, letterSpacing: 1.2)),
-        Text('Ruptures • Sous seuil • Péremption • Actions rapides', style: TextStyle(fontSize: 16, color: palette.subText)),
+        Text(
+          'Alertes stock',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: palette.text,
+            letterSpacing: 1.2,
+          ),
+        ),
+        Text(
+          'Ruptures • Sous seuil • Péremption • Actions rapides',
+          style: TextStyle(fontSize: 16, color: palette.subText),
+        ),
       ],
     );
   }
@@ -210,14 +253,19 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
         padding: const EdgeInsets.all(20),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final searchWidth = constraints.maxWidth > 900 ? 420.0 : constraints.maxWidth - 40;
+            final searchWidth = constraints.maxWidth > 900
+                ? 420.0
+                : constraints.maxWidth - 40;
             return Wrap(
               spacing: 12,
               runSpacing: 16,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: 280, maxWidth: searchWidth),
+                  constraints: BoxConstraints(
+                    minWidth: 280,
+                    maxWidth: searchWidth,
+                  ),
                   child: TextField(
                     controller: _searchController,
                     onChanged: (_) => setState(() {}),
@@ -225,9 +273,17 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
                       hintText: 'Rechercher un produit, code CIP...',
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
-                      fillColor: palette.isDark ? Colors.grey[850] : Colors.grey[100],
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      fillColor: palette.isDark
+                          ? Colors.grey[850]
+                          : Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 18,
+                      ),
                     ),
                   ),
                 ),
@@ -268,14 +324,24 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
       child: DropdownButtonFormField<String>(
         value: value,
         isExpanded: true,
-        items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14)))).toList(),
+        items: items
+            .map(
+              (e) => DropdownMenuItem(
+                value: e,
+                child: Text(e, style: const TextStyle(fontSize: 14)),
+              ),
+            )
+            .toList(),
         onChanged: onChanged,
         decoration: InputDecoration(
           labelText: label,
           filled: true,
           fillColor: Colors.transparent,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 18,
+          ),
         ),
         dropdownColor: palette.isDark ? Colors.grey[900] : Colors.white,
         icon: Icon(Icons.keyboard_arrow_down_rounded, color: palette.subText),
@@ -298,10 +364,10 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
           color: isRupture
               ? Colors.red.withOpacity(0.35)
               : isSousSeuil
-                  ? Colors.orange.withOpacity(0.3)
-                  : isPerime
-                      ? Colors.red.withOpacity(0.3)
-                      : palette.divider,
+              ? Colors.orange.withOpacity(0.3)
+              : isPerime
+              ? Colors.red.withOpacity(0.3)
+              : palette.divider,
           width: 1.5,
         ),
         boxShadow: [
@@ -309,8 +375,8 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
             color: isRupture
                 ? Colors.red.withOpacity(0.15)
                 : isSousSeuil
-                    ? Colors.orange.withOpacity(0.1)
-                    : Colors.black.withOpacity(0.06),
+                ? Colors.orange.withOpacity(0.1)
+                : Colors.black.withOpacity(0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -322,8 +388,16 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
           Row(
             children: [
               Icon(
-                isRupture ? Icons.error : isSousSeuil ? Icons.warning_amber_rounded : Icons.calendar_today,
-                color: isRupture ? Colors.red : isSousSeuil ? Colors.orange : Colors.red,
+                isRupture
+                    ? Icons.error
+                    : isSousSeuil
+                    ? Icons.warning_amber_rounded
+                    : Icons.calendar_today,
+                color: isRupture
+                    ? Colors.red
+                    : isSousSeuil
+                    ? Colors.orange
+                    : Colors.red,
                 size: 30,
               ),
               const SizedBox(width: 14),
@@ -331,9 +405,23 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                    Text(
+                      item.name,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(item.code, style: TextStyle(fontSize: 13, color: palette.subText, fontFamily: 'Roboto Mono')),
+                    Text(
+                      item.code,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: palette.subText,
+                        fontFamily: 'Roboto Mono',
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -358,7 +446,8 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _stockRow('Stock total', item.stock, true, palette),
-                    if (isPerime) _stockRow('Péremption', item.peremption, true, palette),
+                    if (isPerime)
+                      _stockRow('Péremption', item.peremption, true, palette),
                   ],
                 ),
               ),
@@ -366,7 +455,14 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('Valeur impactée : ${item.valeur.toStringAsFixed(0)} FCFA', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: accent)),
+                  Text(
+                    'Valeur impactée : ${item.valeur.toStringAsFixed(0)} FCFA',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: accent,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -376,7 +472,9 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
             alignment: Alignment.centerRight,
             child: Wrap(
               spacing: 12,
-              children: item.actions.map((action) => _actionButton(action, item, palette)).toList(),
+              children: item.actions
+                  .map((action) => _actionButton(action, item, palette))
+                  .toList(),
             ),
           ),
         ],
@@ -393,8 +491,19 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.5))),
-      child: Text(type, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        type,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+      ),
     );
   }
 
@@ -417,10 +526,15 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
       child: TextButton.icon(
         onPressed: () => _handleAction(action, alert),
         icon: Icon(icon, size: 18, color: color),
-        label: Text(_actionLabel(action), style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        label: Text(
+          _actionLabel(action),
+          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+        ),
         style: TextButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
     );
@@ -435,12 +549,24 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
     };
   }
 
-  Widget _stockRow(String label, dynamic value, bool alert, ThemeColors palette, {bool bold = false}) {
+  Widget _stockRow(
+    String label,
+    dynamic value,
+    bool alert,
+    ThemeColors palette, {
+    bool bold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
-          SizedBox(width: 120, child: Text(label, style: TextStyle(color: palette.subText, fontSize: 14))),
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(color: palette.subText, fontSize: 14),
+            ),
+          ),
           Text(
             value.toString(),
             style: TextStyle(
@@ -458,12 +584,18 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: palette.isDark ? Colors.white.withOpacity(0.08) : Colors.grey[200],
+        color: palette.isDark
+            ? Colors.white.withOpacity(0.08)
+            : Colors.grey[200],
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
         '$label: $value',
-        style: TextStyle(fontSize: 12.5, color: palette.text.withOpacity(0.9), fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 12.5,
+          color: palette.text.withOpacity(0.9),
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -474,7 +606,13 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
       decoration: BoxDecoration(
         color: palette.card,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: child,
     );
@@ -498,7 +636,9 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
       final orderId = 'CMD-${DateTime.now().millisecondsSinceEpoch}';
 
       // Determine quantity to order: use the difference between seuil and current stock
-      final quantityToOrder = (alert.seuil - alert.stock).clamp(1, alert.seuil).toInt();
+      final quantityToOrder = (alert.seuil - alert.stock)
+          .clamp(1, alert.seuil)
+          .toInt();
 
       // Insert new order to commandes table
       // fournisseur_id set to null for now (user can assign later)
@@ -515,7 +655,9 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Commande créée: ${alert.name} (qty: $quantityToOrder)'),
+          content: Text(
+            'Commande créée: ${alert.name} (qty: $quantityToOrder)',
+          ),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -525,7 +667,9 @@ class _AlertesStockScreenState extends State<AlertesStockScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de la création de la commande: $e')),
+        SnackBar(
+          content: Text('Erreur lors de la création de la commande: $e'),
+        ),
       );
     }
   }
@@ -537,7 +681,14 @@ class AlertItem {
   final List<String> actions;
 
   const AlertItem({
-    required this.name, required this.code, required this.type, required this.lab, required this.peremption,
-    required this.seuil, required this.stock, required this.valeur, required this.actions,
+    required this.name,
+    required this.code,
+    required this.type,
+    required this.lab,
+    required this.peremption,
+    required this.seuil,
+    required this.stock,
+    required this.valeur,
+    required this.actions,
   });
 }

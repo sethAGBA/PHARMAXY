@@ -13,25 +13,56 @@ class ProductService {
   Future<List<Product>> fetchProductsForSale({String? search}) async {
     final db = _db.db;
     final query = '''
-      SELECT m.id, m.nom, m.cip, m.famille, m.prix_vente
+      SELECT
+        m.id,
+        m.nom,
+        m.cip,
+        m.famille,
+        m.prix_vente,
+        COALESCE(s.officine, 0) as officine
       FROM medicaments m
       LEFT JOIN stocks s ON s.medicament_id = m.id
       GROUP BY m.id
     ''';
     final rows = await db.rawQuery(query);
     final list = rows.map((row) {
-      final barcode = (row['cip'] as String?)?.isNotEmpty == true ? row['cip'] as String : row['id'] as String;
+      final barcode = (row['cip'] as String?)?.isNotEmpty == true
+          ? row['cip'] as String
+          : row['id'] as String;
       return Product(
-        row['nom'] as String? ?? '',
-        barcode,
-        (row['prix_vente'] as num?)?.toDouble() ?? 0,
-        row['famille'] as String? ?? '',
+        id: row['id'] as String? ?? '',
+        name: row['nom'] as String? ?? '',
+        barcode: barcode,
+        price: (row['prix_vente'] as num?)?.toDouble() ?? 0,
+        category: row['famille'] as String? ?? '',
+        availableStock: (row['officine'] as int?) ?? 0,
       );
     }).toList();
 
     if (search == null || search.isEmpty) return list;
     final lower = search.toLowerCase();
-    return list.where((p) => p.name.toLowerCase().contains(lower) || p.barcode.contains(lower)).toList();
+    return list
+        .where(
+          (p) =>
+              p.name.toLowerCase().contains(lower) || p.barcode.contains(lower),
+        )
+        .toList();
+  }
+
+  Future<Map<String, int>> fetchOfficineStockByProductIds(
+    List<String> productIds,
+  ) async {
+    if (productIds.isEmpty) return {};
+    final db = _db.db;
+    final placeholders = List.filled(productIds.length, '?').join(', ');
+    final rows = await db.rawQuery(
+      'SELECT medicament_id, officine FROM stocks WHERE medicament_id IN ($placeholders)',
+      productIds,
+    );
+    return {
+      for (final row in rows)
+        row['medicament_id'] as String: (row['officine'] as int?) ?? 0,
+    };
   }
 
   Future<List<StockEntry>> fetchStockEntries() async {
@@ -128,35 +159,31 @@ class ProductService {
     final db = _db.db;
     final productId = id ?? 'MED-${DateTime.now().millisecondsSinceEpoch}';
 
-    await db.insert(
-      'medicaments',
-      {
-        'id': productId,
-        'nom': nom,
-        'dci': dci,
-        'cip': cip,
-        'dosage': dosage,
-        'famille': famille,
-        'laboratoire': laboratoire,
-        'forme': forme,
-        'prix_achat': prixAchat,
-        'prix_vente': prixVente,
-        'tva': tva,
-        'remboursement': remboursement,
-        'sku': sku,
-        'type': type,
-        'statut': statut,
-        'localisation': localisation,
-        'fournisseur': fournisseur,
-        'ordonnance': ordonnance ? 1 : 0,
-        'controle': controle ? 1 : 0,
-        'description': description,
-        'conditionnement': conditionnement,
-        'notice': notice,
-        'image': image,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('medicaments', {
+      'id': productId,
+      'nom': nom,
+      'dci': dci,
+      'cip': cip,
+      'dosage': dosage,
+      'famille': famille,
+      'laboratoire': laboratoire,
+      'forme': forme,
+      'prix_achat': prixAchat,
+      'prix_vente': prixVente,
+      'tva': tva,
+      'remboursement': remboursement,
+      'sku': sku,
+      'type': type,
+      'statut': statut,
+      'localisation': localisation,
+      'fournisseur': fournisseur,
+      'ordonnance': ordonnance ? 1 : 0,
+      'controle': controle ? 1 : 0,
+      'description': description,
+      'conditionnement': conditionnement,
+      'notice': notice,
+      'image': image,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
 
     final existingStock = await db.query(
       'stocks',
@@ -165,19 +192,15 @@ class ProductService {
       limit: 1,
     );
     if (existingStock.isEmpty) {
-      await db.insert(
-        'stocks',
-        {
-          'medicament_id': productId,
-          'reserve': reserve,
-          'officine': officine,
-          'seuil': seuil,
-          'seuil_max': seuilMax,
-          'peremption': peremptionIso,
-          'lot': lot,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('stocks', {
+        'medicament_id': productId,
+        'reserve': reserve,
+        'officine': officine,
+        'seuil': seuil,
+        'seuil_max': seuilMax,
+        'peremption': peremptionIso,
+        'lot': lot,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     } else {
       await db.update(
         'stocks',
@@ -263,37 +286,38 @@ class StockEntry {
 // Methods for stock movements
 extension StockMovementsMethods on ProductService {
   Future<void> recordStockMovement({
+    DatabaseExecutor? executor,
     required String medicamentId,
     required String type, // 'entree', 'sortie', 'ajustement', 'transfert'
     required int quantity,
     required int quantityBefore,
     required int quantityAfter,
-    required String reason, // 'achat', 'vente', 'inventaire', 'perte', 'correction', etc.
+    required String
+    reason, // 'achat', 'vente', 'inventaire', 'perte', 'correction', etc.
     String? reference,
     String? notes,
     required String utilisateur,
   }) async {
-    final db = _db.db;
+    final dbExecutor = executor ?? _db.db;
     final id = DateTime.now().millisecondsSinceEpoch.toString();
-    await db.insert(
-      'mouvements_stocks',
-      {
-        'id': id,
-        'medicament_id': medicamentId,
-        'type': type,
-        'quantite': quantity,
-        'quantite_avant': quantityBefore,
-        'quantite_apres': quantityAfter,
-        'raison': reason,
-        'reference': reference,
-        'notes': notes,
-        'utilisateur': utilisateur,
-        'date': DateTime.now().toIso8601String(),
-      },
-    );
+    await dbExecutor.insert('mouvements_stocks', {
+      'id': id,
+      'medicament_id': medicamentId,
+      'type': type,
+      'quantite': quantity,
+      'quantite_avant': quantityBefore,
+      'quantite_apres': quantityAfter,
+      'raison': reason,
+      'reference': reference,
+      'notes': notes,
+      'utilisateur': utilisateur,
+      'date': DateTime.now().toIso8601String(),
+    });
   }
 
-  Future<List<StockMovement>> fetchMovementsForProduct(String medicamentId) async {
+  Future<List<StockMovement>> fetchMovementsForProduct(
+    String medicamentId,
+  ) async {
     final db = _db.db;
     final rows = await db.query(
       'mouvements_stocks',

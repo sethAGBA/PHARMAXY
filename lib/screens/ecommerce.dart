@@ -9,7 +9,8 @@ class EcommerceScreen extends StatefulWidget {
   State<EcommerceScreen> createState() => _EcommerceScreenState();
 }
 
-class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProviderStateMixin {
+class _EcommerceScreenState extends State<EcommerceScreen>
+    with SingleTickerProviderStateMixin {
   AnimationController? _controller;
   Animation<double> _fade = const AlwaysStoppedAnimation<double>(1);
   String _fulfillment = 'Tous';
@@ -24,8 +25,13 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller!, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _controller!, curve: Curves.easeOutCubic),
+    );
     _controller!.forward();
   }
 
@@ -39,8 +45,10 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
   List<_CommandeWeb> get _filteredOrders {
     final q = _searchController.text.toLowerCase();
     return _commandes.where((c) {
-      final matchesText = c.ref.toLowerCase().contains(q) || c.client.toLowerCase().contains(q);
-      final matchesFulfillment = _fulfillment == 'Tous' || c.mode == _fulfillment;
+      final matchesText =
+          c.ref.toLowerCase().contains(q) || c.client.toLowerCase().contains(q);
+      final matchesFulfillment =
+          _fulfillment == 'Tous' || c.mode == _fulfillment;
       final matchesStatus = _status == 'Tous' || c.statut == _status;
       return matchesText && matchesFulfillment && matchesStatus;
     }).toList();
@@ -89,15 +97,28 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
       children: [
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: accent.withOpacity(0.12), shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: accent.withOpacity(0.12),
+            shape: BoxShape.circle,
+          ),
           child: Icon(Icons.shopping_bag, color: accent, size: 26),
         ),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('E-commerce', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: palette.text)),
-            Text('Catalogue en ligne • Commandes web • Click & collect', style: TextStyle(color: palette.subText)),
+            Text(
+              'E-commerce',
+              style: TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
+            ),
+            Text(
+              'Catalogue en ligne • Commandes web • Click & collect',
+              style: TextStyle(color: palette.subText),
+            ),
           ],
         ),
         const Spacer(),
@@ -108,7 +129,9 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
           style: ElevatedButton.styleFrom(
             backgroundColor: accent,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
       ],
@@ -118,37 +141,90 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
   Widget _buildKpis(ThemeColors palette, Color accent) {
     return Row(
       children: [
-        Expanded(child: _kpi('Commandes jour', '24', Icons.shopping_cart, accent, palette)),
+        Expanded(
+          child: _kpi(
+            'Commandes jour',
+            '24',
+            Icons.shopping_cart,
+            accent,
+            palette,
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _kpi('CA web (mois)', '1 245 000 FCFA', Icons.payments, Colors.green, palette)),
+        Expanded(
+          child: _kpi(
+            'CA web (mois)',
+            '1 245 000 FCFA',
+            Icons.payments,
+            Colors.green,
+            palette,
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _kpi('Click & collect prêts', '6', Icons.store, Colors.orange, palette)),
+        Expanded(
+          child: _kpi(
+            'Click & collect prêts',
+            '6',
+            Icons.store,
+            Colors.orange,
+            palette,
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _kpi('Panier moyen', '22 300 FCFA', Icons.bar_chart, Colors.indigo, palette)),
+        Expanded(
+          child: _kpi(
+            'Panier moyen',
+            '22 300 FCFA',
+            Icons.bar_chart,
+            Colors.indigo,
+            palette,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _kpi(String title, String value, IconData icon, Color color, ThemeColors palette) {
+  Widget _kpi(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    ThemeColors palette,
+  ) {
     return _card(
       palette,
       child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: color, size: 24),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 32),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(color: palette.subText, fontSize: 13)),
-                const SizedBox(height: 4),
-                Text(value, style: TextStyle(color: palette.text, fontSize: 22, fontWeight: FontWeight.bold)),
-              ],
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: TextStyle(
+                color: palette.subText,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                color: palette.text,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
             ),
           ],
         ),
@@ -175,9 +251,17 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
                   hintText: 'Rechercher commande ou client...',
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
-                  fillColor: palette.isDark ? Colors.grey[850] : Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  fillColor: palette.isDark
+                      ? Colors.grey[850]
+                      : Colors.grey[100],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
               ),
             ),
@@ -190,8 +274,13 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
                 onChanged: (v) => setState(() => _fulfillment = v ?? 'Tous'),
                 decoration: InputDecoration(
                   labelText: 'Mode de retrait',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
                 dropdownColor: palette.card,
               ),
@@ -199,14 +288,26 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
             Flexible(
               child: DropdownButtonFormField<String>(
                 value: _status,
-                items: const ['Tous', 'En attente paiement', 'En préparation', 'Expédiée', 'Payée']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
+                items:
+                    const [
+                          'Tous',
+                          'En attente paiement',
+                          'En préparation',
+                          'Expédiée',
+                          'Payée',
+                        ]
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
                 onChanged: (v) => setState(() => _status = v ?? 'Tous'),
                 decoration: InputDecoration(
                   labelText: 'Statut',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
                 dropdownColor: palette.card,
               ),
@@ -222,7 +323,13 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
                 children: [
                   Icon(Icons.list_alt, color: accent, size: 18),
                   const SizedBox(width: 8),
-                  Text('${_filteredOrders.length} commandes', style: TextStyle(color: palette.text, fontWeight: FontWeight.w600)),
+                  Text(
+                    '${_filteredOrders.length} commandes',
+                    style: TextStyle(
+                      color: palette.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -244,7 +351,14 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
               children: [
                 Icon(Icons.receipt_long, color: accent),
                 const SizedBox(width: 8),
-                Text('Commandes web', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                Text(
+                  'Commandes web',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
                 const Spacer(),
                 ElevatedButton.icon(
                   onPressed: () {},
@@ -252,8 +366,13 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
                   label: const Text('Créer commande'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: accent,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ],
@@ -273,7 +392,9 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
                   _col('Produits', palette),
                   _col('Actions', palette),
                 ],
-                rows: _filteredOrders.map((o) => _orderRow(o, palette)).toList(),
+                rows: _filteredOrders
+                    .map((o) => _orderRow(o, palette))
+                    .toList(),
               ),
             ),
           ],
@@ -289,19 +410,35 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
         DataCell(Text(o.ref, style: TextStyle(color: palette.text))),
         DataCell(Text(o.date, style: TextStyle(color: palette.text))),
         DataCell(Text(o.client, style: TextStyle(color: palette.text))),
-        DataCell(Text('${o.montant} FCFA', style: TextStyle(color: palette.text, fontWeight: FontWeight.w600))),
-        DataCell(Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(color: statusColor.withOpacity(0.14), borderRadius: BorderRadius.circular(10)),
-          child: Text(o.statut, style: TextStyle(color: statusColor, fontWeight: FontWeight.w700)),
-        )),
+        DataCell(
+          Text(
+            '${o.montant} FCFA',
+            style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
+          ),
+        ),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              o.statut,
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
         DataCell(Text(o.mode, style: TextStyle(color: palette.text))),
         DataCell(Text('${o.produits}', style: TextStyle(color: palette.text))),
         DataCell(
           Row(
             children: [
               IconButton(onPressed: () {}, icon: const Icon(Icons.visibility)),
-              IconButton(onPressed: () {}, icon: const Icon(Icons.check_circle_outline)),
+              IconButton(
+                onPressed: () {},
+                icon: const Icon(Icons.check_circle_outline),
+              ),
             ],
           ),
         ),
@@ -321,7 +458,14 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
               children: [
                 Icon(Icons.inventory_2, color: accent),
                 const SizedBox(width: 8),
-                Text('Catalogue en ligne', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                Text(
+                  'Catalogue en ligne',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
                 const Spacer(),
                 OutlinedButton.icon(
                   onPressed: () {},
@@ -330,8 +474,13 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
                   style: OutlinedButton.styleFrom(
                     foregroundColor: accent,
                     side: BorderSide(color: accent.withOpacity(0.35)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ],
@@ -340,7 +489,9 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
             Wrap(
               spacing: 12,
               runSpacing: 12,
-              children: _catalogue.map((p) => _productCard(p, palette)).toList(),
+              children: _catalogue
+                  .map((p) => _productCard(p, palette))
+                  .toList(),
             ),
           ],
         ),
@@ -358,7 +509,9 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
         border: Border.all(color: palette.divider),
         boxShadow: [
           BoxShadow(
-            color: palette.isDark ? Colors.black.withOpacity(0.25) : Colors.grey.withOpacity(0.12),
+            color: palette.isDark
+                ? Colors.black.withOpacity(0.25)
+                : Colors.grey.withOpacity(0.12),
             blurRadius: 10,
             offset: const Offset(0, 6),
           ),
@@ -371,17 +524,31 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
             children: [
               Icon(Icons.medical_services, color: palette.subText),
               const SizedBox(width: 8),
-              Expanded(child: Text(p.nom, style: TextStyle(fontWeight: FontWeight.bold, color: palette.text))),
+              Expanded(
+                child: Text(
+                  p.nom,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          Text('${p.prix} FCFA', style: TextStyle(color: palette.text, fontWeight: FontWeight.w700)),
+          Text(
+            '${p.prix} FCFA',
+            style: TextStyle(color: palette.text, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 4),
           Row(
             children: [
               Icon(Icons.inventory, size: 16, color: palette.subText),
               const SizedBox(width: 4),
-              Text('Stock: ${p.stock}', style: TextStyle(color: palette.subText)),
+              Text(
+                'Stock: ${p.stock}',
+                style: TextStyle(color: palette.subText),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -392,7 +559,10 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
                 onChanged: (_) {},
                 activeColor: Colors.teal,
               ),
-              Text(p.actif ? 'Publié' : 'Masqué', style: TextStyle(color: palette.text)),
+              Text(
+                p.actif ? 'Publié' : 'Masqué',
+                style: TextStyle(color: palette.text),
+              ),
             ],
           ),
         ],
@@ -413,9 +583,19 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Synchronisation des stocks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                  Text(
+                    'Synchronisation des stocks',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: palette.text,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text('Automatisez la mise à jour des stocks web après ventes en officine.', style: TextStyle(color: palette.subText)),
+                  Text(
+                    'Automatisez la mise à jour des stocks web après ventes en officine.',
+                    style: TextStyle(color: palette.subText),
+                  ),
                 ],
               ),
             ),
@@ -425,8 +605,13 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
               label: const Text('Configurer'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: accent,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -451,7 +636,12 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
   }
 
   DataColumn _col(String label, ThemeColors palette) {
-    return DataColumn(label: Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: palette.text)));
+    return DataColumn(
+      label: Text(
+        label,
+        style: TextStyle(fontWeight: FontWeight.bold, color: palette.text),
+      ),
+    );
   }
 
   Widget _card(ThemeColors palette, {required Widget child}) {
@@ -463,7 +653,9 @@ class _EcommerceScreenState extends State<EcommerceScreen> with SingleTickerProv
         border: Border.all(color: palette.divider),
         boxShadow: [
           BoxShadow(
-            color: palette.isDark ? Colors.black.withOpacity(0.25) : Colors.grey.withOpacity(0.12),
+            color: palette.isDark
+                ? Colors.black.withOpacity(0.25)
+                : Colors.grey.withOpacity(0.12),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -500,5 +692,10 @@ class _Produit {
   final int prix;
   final bool actif;
 
-  const _Produit({required this.nom, required this.stock, required this.prix, required this.actif});
+  const _Produit({
+    required this.nom,
+    required this.stock,
+    required this.prix,
+    required this.actif,
+  });
 }

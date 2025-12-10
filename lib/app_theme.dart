@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 // ValueNotifier to toggle between light and dark themes across the app.
-final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.dark);
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+  ThemeMode.dark,
+);
 
 ThemeData buildLightTheme() {
   return ThemeData(

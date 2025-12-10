@@ -7,10 +7,12 @@ class PreparationsMagistralesScreen extends StatefulWidget {
   const PreparationsMagistralesScreen({super.key});
 
   @override
-  State<PreparationsMagistralesScreen> createState() => _PreparationsMagistralesScreenState();
+  State<PreparationsMagistralesScreen> createState() =>
+      _PreparationsMagistralesScreenState();
 }
 
-class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesScreen>
+class _PreparationsMagistralesScreenState
+    extends State<PreparationsMagistralesScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fade;
@@ -31,7 +33,8 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
         Composant(nom: 'Eau purifiée', quantite: 20, unite: 'ml'),
         Composant(nom: 'Arôme cerise', quantite: 1, unite: 'ml'),
       ],
-      instructions: 'Dissoudre la codéine dans 10 ml d\'eau chaude, ajouter au sirop simple, compléter avec eau purifiée, ajouter arôme, homogénéiser.',
+      instructions:
+          'Dissoudre la codéine dans 10 ml d\'eau chaude, ajouter au sirop simple, compléter avec eau purifiée, ajouter arôme, homogénéiser.',
       conservation: '15 jours à température ambiante',
       posologie: '5 ml × 3/jour',
     ),
@@ -47,22 +50,43 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
         Composant(nom: 'Cire émulsifiante', quantite: 15, unite: 'g'),
         Composant(nom: 'Eau purifiée', quantite: 5, unite: 'g'),
       ],
-      instructions: 'Faire fondre la phase grasse au bain-marie, incorporer l\'eau tiède progressivement en agitant, laisser refroidir en remuant.',
+      instructions:
+          'Faire fondre la phase grasse au bain-marie, incorporer l\'eau tiède progressivement en agitant, laisser refroidir en remuant.',
       conservation: '3 mois au réfrigérateur',
       posologie: 'Application 2 fois par jour',
     ),
   ];
 
   final List<Preparation> _preparations = [
-    Preparation(id: 'PRP-2025-187', date: DateTime(2025, 12, 9), formule: 'Sirop antitussif maison', quantite: 200, preparateur: 'Marie K.', statut: 'Validée'),
-    Preparation(id: 'PRP-2025-186', date: DateTime(2025, 12, 8), formule: 'Crème émolliente 20%', quantite: 100, preparateur: 'Jean A.', statut: 'En cours'),
+    Preparation(
+      id: 'PRP-2025-187',
+      date: DateTime(2025, 12, 9),
+      formule: 'Sirop antitussif maison',
+      quantite: 200,
+      preparateur: 'Marie K.',
+      statut: 'Validée',
+    ),
+    Preparation(
+      id: 'PRP-2025-186',
+      date: DateTime(2025, 12, 8),
+      formule: 'Crème émolliente 20%',
+      quantite: 100,
+      preparateur: 'Jean A.',
+      statut: 'En cours',
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
   }
 
@@ -94,7 +118,16 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
                 children: [
                   Expanded(flex: 2, child: _buildBibliotheque(palette, accent)),
                   const SizedBox(width: 24),
-                  Expanded(flex: 3, child: _formuleSelectionnee == null ? _buildAccueil() : _buildDetailFormule(_formuleSelectionnee!, palette, accent)),
+                  Expanded(
+                    flex: 3,
+                    child: _formuleSelectionnee == null
+                        ? _buildAccueil()
+                        : _buildDetailFormule(
+                            _formuleSelectionnee!,
+                            palette,
+                            accent,
+                          ),
+                  ),
                 ],
               ),
             ),
@@ -112,10 +145,21 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
           children: [
             Icon(Icons.science, color: accent, size: 40),
             const SizedBox(width: 16),
-            Text('Préparations magistrales', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: palette.text, letterSpacing: 1.2)),
+            Text(
+              'Préparations magistrales',
+              style: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+                letterSpacing: 1.2,
+              ),
+            ),
           ],
         ),
-        Text('Formules • Dosages • Fabrication • Étiquetage • Traçabilité', style: TextStyle(fontSize: 16, color: palette.subText)),
+        Text(
+          'Formules • Dosages • Fabrication • Étiquetage • Traçabilité',
+          style: TextStyle(fontSize: 16, color: palette.subText),
+        ),
       ],
     );
   }
@@ -134,15 +178,26 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
                   hintText: 'Rechercher une formule...',
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
-                  fillColor: palette.isDark ? Colors.grey[850] : Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  fillColor: palette.isDark
+                      ? Colors.grey[850]
+                      : Colors.grey[100],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 16),
             DropdownButton<String>(
               value: _selectedFormule,
-              items: ['Toutes', 'Sirop', 'Crème', 'Gélule', 'Pommade'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              items: [
+                'Toutes',
+                'Sirop',
+                'Crème',
+                'Gélule',
+                'Pommade',
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
               onChanged: (v) => setState(() => _selectedFormule = v!),
               style: TextStyle(color: palette.text),
               dropdownColor: palette.isDark ? Colors.grey[900] : Colors.white,
@@ -152,7 +207,10 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
               onPressed: () {},
               icon: const Icon(Icons.add),
               label: const Text('Nouvelle formule'),
-              style: ElevatedButton.styleFrom(backgroundColor: accent, padding: const EdgeInsets.all(16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                padding: const EdgeInsets.all(16),
+              ),
             ),
           ],
         ),
@@ -161,7 +219,13 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
   }
 
   Widget _buildBibliotheque(ThemeColors palette, Color accent) {
-    final filtered = _formules.where((f) => f.nom.toLowerCase().contains(_searchQuery.toLowerCase()) && (_selectedFormule == 'Toutes' || f.categorie == _selectedFormule)).toList();
+    final filtered = _formules
+        .where(
+          (f) =>
+              f.nom.toLowerCase().contains(_searchQuery.toLowerCase()) &&
+              (_selectedFormule == 'Toutes' || f.categorie == _selectedFormule),
+        )
+        .toList();
 
     return _card(
       palette,
@@ -173,7 +237,14 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
               children: [
                 Icon(Icons.library_books, color: accent, size: 28),
                 const SizedBox(width: 12),
-                Text('Bibliothèque de formules', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+                Text(
+                  'Bibliothèque de formules',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
               ],
             ),
           ),
@@ -191,12 +262,30 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
                   decoration: BoxDecoration(
                     color: isSelected ? accent.withOpacity(0.15) : palette.card,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: isSelected ? accent : palette.divider),
+                    border: Border.all(
+                      color: isSelected ? accent : palette.divider,
+                    ),
                   ),
                   child: ListTile(
-                    leading: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: accent.withOpacity(0.2), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.science, color: Colors.white)),
-                    title: Text(formule.nom, style: TextStyle(fontWeight: FontWeight.bold, color: palette.text)),
-                    subtitle: Text('${formule.categorie} • ${formule.quantiteTotale}${formule.unite}', style: TextStyle(color: palette.subText)),
+                    leading: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.science, color: Colors.white),
+                    ),
+                    title: Text(
+                      formule.nom,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${formule.categorie} • ${formule.quantiteTotale}${formule.unite}',
+                      style: TextStyle(color: palette.subText),
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => setState(() => _formuleSelectionnee = formule),
                   ),
@@ -216,15 +305,25 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
         children: [
           Icon(Icons.science_outlined, size: 120, color: Colors.grey[400]),
           const SizedBox(height: 24),
-          Text('Sélectionnez une formule dans la bibliothèque', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+          Text(
+            'Sélectionnez une formule dans la bibliothèque',
+            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+          ),
           const SizedBox(height: 8),
-          Text('ou créez-en une nouvelle', style: TextStyle(color: Colors.grey[500])),
+          Text(
+            'ou créez-en une nouvelle',
+            style: TextStyle(color: Colors.grey[500]),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDetailFormule(Formula formule, ThemeColors palette, Color accent) {
+  Widget _buildDetailFormule(
+    Formula formule,
+    ThemeColors palette,
+    Color accent,
+  ) {
     return _card(
       palette,
       child: SingleChildScrollView(
@@ -234,14 +333,35 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
           children: [
             Row(
               children: [
-                Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.science, color: Colors.white, size: 32)),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.science,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(formule.nom, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: palette.text)),
-                      Text('${formule.categorie} • ${formule.quantiteTotale}${formule.unite}', style: TextStyle(fontSize: 16, color: palette.subText)),
+                      Text(
+                        formule.nom,
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: palette.text,
+                        ),
+                      ),
+                      Text(
+                        '${formule.categorie} • ${formule.quantiteTotale}${formule.unite}',
+                        style: TextStyle(fontSize: 16, color: palette.subText),
+                      ),
                     ],
                   ),
                 ),
@@ -249,7 +369,13 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
                   onPressed: () {},
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Démarrer préparation'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -263,13 +389,27 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
             const SizedBox(height: 32),
 
             // === INSTRUCTIONS ===
-            _section('Instructions de fabrication', Icons.format_list_numbered, palette),
+            _section(
+              'Instructions de fabrication',
+              Icons.format_list_numbered,
+              palette,
+            ),
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: palette.isDark ? Colors.grey[850] : Colors.grey[50], borderRadius: BorderRadius.circular(16)),
-              child: Text(formule.instructions, style: TextStyle(fontSize: 15, height: 1.6, color: palette.text)),
+              decoration: BoxDecoration(
+                color: palette.isDark ? Colors.grey[850] : Colors.grey[50],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                formule.instructions,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.6,
+                  color: palette.text,
+                ),
+              ),
             ),
 
             const SizedBox(height: 32),
@@ -277,9 +417,25 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
             // === INFOS COMPLÉMENTAIRES ===
             Row(
               children: [
-                Expanded(child: _infoBox('Conservation', formule.conservation, Icons.info_outline, Colors.blue, palette)),
+                Expanded(
+                  child: _infoBox(
+                    'Conservation',
+                    formule.conservation,
+                    Icons.info_outline,
+                    Colors.blue,
+                    palette,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _infoBox('Posologie', formule.posologie, Icons.medication, Colors.green, palette)),
+                Expanded(
+                  child: _infoBox(
+                    'Posologie',
+                    formule.posologie,
+                    Icons.medication,
+                    Colors.green,
+                    palette,
+                  ),
+                ),
               ],
             ),
 
@@ -288,7 +444,9 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
             // === TRAÇABILITÉ RÉCENTE ===
             _section('Dernières préparations', Icons.history, palette),
             const SizedBox(height: 16),
-            ..._preparations.where((p) => p.formule == formule.nom).map((p) => _prepaRow(p, palette, accent)),
+            ..._preparations
+                .where((p) => p.formule == formule.nom)
+                .map((p) => _prepaRow(p, palette, accent)),
           ],
         ),
       ),
@@ -299,28 +457,65 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: palette.isDark ? Colors.grey[850] : Colors.grey[50], borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: palette.isDark ? Colors.grey[850] : Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
           Icon(Icons.circle, size: 12, color: Colors.teal),
           const SizedBox(width: 16),
-          Expanded(child: Text(c.nom, style: TextStyle(fontWeight: FontWeight.w600, color: palette.text))),
-          Text('${c.quantite} ${c.unite}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+          Expanded(
+            child: Text(
+              c.nom,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: palette.text,
+              ),
+            ),
+          ),
+          Text(
+            '${c.quantite} ${c.unite}',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
+          ),
         ],
       ),
     );
   }
 
-  Widget _infoBox(String label, String value, IconData icon, Color color, ThemeColors palette) {
+  Widget _infoBox(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    ThemeColors palette,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.3))),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [Icon(icon, color: color), const SizedBox(width: 8), Text(label, style: TextStyle(color: palette.subText))]),
+          Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Text(label, style: TextStyle(color: palette.subText)),
+            ],
+          ),
           const SizedBox(height: 12),
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: palette.text,
+            ),
+          ),
         ],
       ),
     );
@@ -331,17 +526,41 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: palette.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
+      decoration: BoxDecoration(
+        color: palette.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
       child: Row(
         children: [
-          Icon(p.statut == 'Validée' ? Icons.check_circle : Icons.pending, color: color),
+          Icon(
+            p.statut == 'Validée' ? Icons.check_circle : Icons.pending,
+            color: color,
+          ),
           const SizedBox(width: 16),
-          Expanded(child: Text(p.id, style: TextStyle(fontWeight: FontWeight.bold, color: palette.text))),
-          Text(DateFormat('dd/MM/yyyy').format(p.date), style: TextStyle(color: palette.subText)),
+          Expanded(
+            child: Text(
+              p.id,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
+            ),
+          ),
+          Text(
+            DateFormat('dd/MM/yyyy').format(p.date),
+            style: TextStyle(color: palette.subText),
+          ),
           const SizedBox(width: 20),
-          Text(p.preparateur, style: TextStyle(color: accent, fontWeight: FontWeight.w600)),
+          Text(
+            p.preparateur,
+            style: TextStyle(color: accent, fontWeight: FontWeight.w600),
+          ),
           const Spacer(),
-          Text('${p.quantite} ml', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            '${p.quantite} ml',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
@@ -352,7 +571,14 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
       children: [
         Icon(icon, color: Colors.teal, size: 28),
         const SizedBox(width: 12),
-        Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text)),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: palette.text,
+          ),
+        ),
       ],
     );
   }
@@ -363,7 +589,13 @@ class _PreparationsMagistralesScreenState extends State<PreparationsMagistralesS
       decoration: BoxDecoration(
         color: palette.card,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(palette.isDark ? 0.4 : 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: child,
     );
@@ -376,18 +608,38 @@ class Formula {
   final int quantiteTotale;
   final String unite;
   final List<Composant> composants;
-  const Formula({required this.nom, required this.categorie, required this.quantiteTotale, required this.unite, required this.composants, required this.instructions, required this.conservation, required this.posologie});
+  const Formula({
+    required this.nom,
+    required this.categorie,
+    required this.quantiteTotale,
+    required this.unite,
+    required this.composants,
+    required this.instructions,
+    required this.conservation,
+    required this.posologie,
+  });
 }
 
 class Composant {
   final String nom, unite;
   final double quantite;
-  const Composant({required this.nom, required this.quantite, required this.unite});
+  const Composant({
+    required this.nom,
+    required this.quantite,
+    required this.unite,
+  });
 }
 
 class Preparation {
   final String id, formule, preparateur, statut;
   final DateTime date;
   final int quantite;
-  const Preparation({required this.id, required this.date, required this.formule, required this.quantite, required this.preparateur, required this.statut});
+  const Preparation({
+    required this.id,
+    required this.date,
+    required this.formule,
+    required this.quantite,
+    required this.preparateur,
+    required this.statut,
+  });
 }

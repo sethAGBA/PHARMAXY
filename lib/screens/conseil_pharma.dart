@@ -9,7 +9,8 @@ class ConseilPharmaScreen extends StatefulWidget {
   State<ConseilPharmaScreen> createState() => _ConseilPharmaScreenState();
 }
 
-class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTickerProviderStateMixin {
+class _ConseilPharmaScreenState extends State<ConseilPharmaScreen>
+    with SingleTickerProviderStateMixin {
   AnimationController? _controller;
   Animation<double> _fade = const AlwaysStoppedAnimation<double>(1);
   final TextEditingController _searchController = TextEditingController();
@@ -23,7 +24,11 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
       profil: 'Adulte',
       posologie: '1 cp toutes les 6h (max 3g/j)',
       interactions: ['Warfarine (surveillance INR)', 'Alcool (hépatotoxicité)'],
-      conseils: ['Prendre après repas', 'Éviter alcool', 'Hydratation conseillée'],
+      conseils: [
+        'Prendre après repas',
+        'Éviter alcool',
+        'Hydratation conseillée',
+      ],
     ),
     _Medication(
       nom: 'Amoxicilline 1g',
@@ -32,7 +37,11 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
       profil: 'Adulte',
       posologie: '1g matin et soir pendant 7 jours',
       interactions: ['Méthotrexate (toxicité ↑)', 'Anticoagulants oraux (INR)'],
-      conseils: ['Prendre au début du repas', 'Poursuivre le traitement 7 jours', 'Surveiller réactions allergiques'],
+      conseils: [
+        'Prendre au début du repas',
+        'Poursuivre le traitement 7 jours',
+        'Surveiller réactions allergiques',
+      ],
     ),
     _Medication(
       nom: 'Ibuprofène 400mg',
@@ -40,8 +49,15 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
       indication: 'Douleurs et inflammations',
       profil: 'Adulte',
       posologie: '1 cp toutes les 8h si besoin (max 1200mg/j)',
-      interactions: ['AVK/DOAC (risque hémorragique)', 'AINS/aspirine (irritation GI)'],
-      conseils: ['Prendre pendant un repas', 'Éviter grossesse T3', 'Hydratation suffisante'],
+      interactions: [
+        'AVK/DOAC (risque hémorragique)',
+        'AINS/aspirine (irritation GI)',
+      ],
+      conseils: [
+        'Prendre pendant un repas',
+        'Éviter grossesse T3',
+        'Hydratation suffisante',
+      ],
     ),
     _Medication(
       nom: 'Cétirizine 10mg',
@@ -55,17 +71,38 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
   ];
 
   final List<_Interaction> _interactions = const [
-    _Interaction(medicaments: 'Paracétamol + Alcool', risque: 'Hépatotoxicité', action: 'Éviter, informer patient'),
-    _Interaction(medicaments: 'Ibuprofène + AVK', risque: 'Hémorragie', action: 'Proscrire, proposer paracétamol'),
-    _Interaction(medicaments: 'Amoxicilline + Méthotrexate', risque: 'Toxicité MTX', action: 'Surveiller, adapter dose MTX'),
-    _Interaction(medicaments: 'Antihistaminiques + Alcool', risque: 'Somnolence', action: 'Conseil d\'éviter la conduite'),
+    _Interaction(
+      medicaments: 'Paracétamol + Alcool',
+      risque: 'Hépatotoxicité',
+      action: 'Éviter, informer patient',
+    ),
+    _Interaction(
+      medicaments: 'Ibuprofène + AVK',
+      risque: 'Hémorragie',
+      action: 'Proscrire, proposer paracétamol',
+    ),
+    _Interaction(
+      medicaments: 'Amoxicilline + Méthotrexate',
+      risque: 'Toxicité MTX',
+      action: 'Surveiller, adapter dose MTX',
+    ),
+    _Interaction(
+      medicaments: 'Antihistaminiques + Alcool',
+      risque: 'Somnolence',
+      action: 'Conseil d\'éviter la conduite',
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller!, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _controller!, curve: Curves.easeOutCubic),
+    );
     _controller!.forward();
   }
 
@@ -79,7 +116,10 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
   List<_Medication> get _filtered {
     return _base.where((med) {
       final query = _searchController.text.toLowerCase();
-      final matchesText = med.nom.toLowerCase().contains(query) || med.dci.toLowerCase().contains(query) || med.indication.toLowerCase().contains(query);
+      final matchesText =
+          med.nom.toLowerCase().contains(query) ||
+          med.dci.toLowerCase().contains(query) ||
+          med.indication.toLowerCase().contains(query);
       final matchesProfil = _profil == 'Tous' || med.profil.contains(_profil);
       return matchesText && matchesProfil;
     }).toList();
@@ -133,11 +173,21 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: accent.withOpacity(0.12), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: accent.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
               child: Icon(Icons.medical_information, color: accent, size: 28),
             ),
             const SizedBox(width: 12),
-            Text('Conseil pharmaceutique', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: palette.text)),
+            Text(
+              'Conseil pharmaceutique',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
+            ),
             const Spacer(),
             OutlinedButton.icon(
               onPressed: () {},
@@ -146,8 +196,13 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               style: OutlinedButton.styleFrom(
                 foregroundColor: accent,
                 side: BorderSide(color: accent.withOpacity(0.4)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -171,16 +226,36 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
           runSpacing: 12,
           children: [
             _actionChip(Icons.print, 'Imprimer fiche patient', accent, palette),
-            _actionChip(Icons.science, 'Vérifier interactions', Colors.orange, palette),
-            _actionChip(Icons.medical_services, 'Posologies pédiatriques', Colors.indigo, palette),
-            _actionChip(Icons.tips_and_updates, 'Conseils personnalisés', Colors.green, palette),
+            _actionChip(
+              Icons.science,
+              'Vérifier interactions',
+              Colors.orange,
+              palette,
+            ),
+            _actionChip(
+              Icons.medical_services,
+              'Posologies pédiatriques',
+              Colors.indigo,
+              palette,
+            ),
+            _actionChip(
+              Icons.tips_and_updates,
+              'Conseils personnalisés',
+              Colors.green,
+              palette,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _actionChip(IconData icon, String label, Color color, ThemeColors palette) {
+  Widget _actionChip(
+    IconData icon,
+    String label,
+    Color color,
+    ThemeColors palette,
+  ) {
     return InkWell(
       onTap: () {},
       borderRadius: BorderRadius.circular(12),
@@ -196,7 +271,13 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: palette.text, fontWeight: FontWeight.w600)),
+            Text(
+              label,
+              style: TextStyle(
+                color: palette.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -222,9 +303,17 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
                   hintText: 'Rechercher un médicament, DCI, indication...',
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
-                  fillColor: palette.isDark ? Colors.grey[850] : Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  fillColor: palette.isDark
+                      ? Colors.grey[850]
+                      : Colors.grey[100],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
               ),
             ),
@@ -232,14 +321,26 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               width: 200,
               child: DropdownButtonFormField<String>(
                 value: _profil,
-                items: const ['Tous', 'Adulte', 'Enfant', 'Grossesse', 'Allaitement']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
+                items:
+                    const [
+                          'Tous',
+                          'Adulte',
+                          'Enfant',
+                          'Grossesse',
+                          'Allaitement',
+                        ]
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
                 onChanged: (v) => setState(() => _profil = v ?? 'Tous'),
                 decoration: InputDecoration(
                   labelText: 'Profil patient',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
                 dropdownColor: palette.card,
               ),
@@ -255,7 +356,13 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
                 children: [
                   Icon(Icons.lightbulb, color: accent, size: 18),
                   const SizedBox(width: 8),
-                  Text('${_filtered.length} résultats', style: TextStyle(color: palette.text, fontWeight: FontWeight.w600)),
+                  Text(
+                    '${_filtered.length} résultats',
+                    style: TextStyle(
+                      color: palette.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -277,12 +384,21 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               children: [
                 Icon(Icons.medication_liquid, color: accent),
                 const SizedBox(width: 8),
-                Text('Base médicaments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                Text(
+                  'Base médicaments',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Column(
-              children: _filtered.map((med) => _medCard(med, palette, accent)).toList(),
+              children: _filtered
+                  .map((med) => _medCard(med, palette, accent))
+                  .toList(),
             ),
           ],
         ),
@@ -300,7 +416,9 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
         border: Border.all(color: palette.divider),
         boxShadow: [
           BoxShadow(
-            color: palette.isDark ? Colors.black.withOpacity(0.3) : Colors.grey.withOpacity(0.08),
+            color: palette.isDark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.grey.withOpacity(0.08),
             blurRadius: 10,
             offset: const Offset(0, 6),
           ),
@@ -313,7 +431,10 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: accent.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Icon(Icons.healing, color: accent),
               ),
               const SizedBox(width: 12),
@@ -321,8 +442,18 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(med.nom, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
-                    Text('${med.dci} • ${med.indication}', style: TextStyle(color: palette.subText)),
+                    Text(
+                      med.nom,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
+                    Text(
+                      '${med.dci} • ${med.indication}',
+                      style: TextStyle(color: palette.subText),
+                    ),
                   ],
                 ),
               ),
@@ -334,7 +465,12 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
             children: [
               Icon(Icons.schedule, size: 18, color: palette.subText),
               const SizedBox(width: 6),
-              Expanded(child: Text('Posologie: ${med.posologie}', style: TextStyle(color: palette.text))),
+              Expanded(
+                child: Text(
+                  'Posologie: ${med.posologie}',
+                  style: TextStyle(color: palette.text),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -348,10 +484,14 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
                   spacing: 8,
                   runSpacing: 6,
                   children: med.interactions
-                      .map((i) => Chip(
-                            label: Text(i, style: TextStyle(color: palette.text)),
-                            backgroundColor: palette.isDark ? Colors.grey[800] : Colors.grey[100],
-                          ))
+                      .map(
+                        (i) => Chip(
+                          label: Text(i, style: TextStyle(color: palette.text)),
+                          backgroundColor: palette.isDark
+                              ? Colors.grey[800]
+                              : Colors.grey[100],
+                        ),
+                      )
                       .toList(),
                 ),
               ),
@@ -362,7 +502,12 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
             children: [
               Icon(Icons.tips_and_updates, size: 18, color: Colors.green),
               const SizedBox(width: 6),
-              Expanded(child: Text(med.conseils.join(' • '), style: TextStyle(color: palette.text))),
+              Expanded(
+                child: Text(
+                  med.conseils.join(' • '),
+                  style: TextStyle(color: palette.text),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -394,7 +539,10 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
-      child: Text(label, style: TextStyle(color: palette.text, fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
+      ),
     );
   }
 
@@ -410,7 +558,14 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               children: [
                 Icon(Icons.sync_problem, color: Colors.orange),
                 const SizedBox(width: 8),
-                Text('Interactions critiques', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                Text(
+                  'Interactions critiques',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -419,17 +574,59 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               child: DataTable(
                 columnSpacing: 28,
                 columns: [
-                  DataColumn(label: Text('Association', style: TextStyle(fontWeight: FontWeight.bold, color: palette.text))),
-                  DataColumn(label: Text('Risque', style: TextStyle(fontWeight: FontWeight.bold, color: palette.text))),
-                  DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: palette.text))),
+                  DataColumn(
+                    label: Text(
+                      'Association',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Risque',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Action',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
+                  ),
                 ],
                 rows: _interactions
                     .map(
                       (i) => DataRow(
                         cells: [
-                          DataCell(Text(i.medicaments, style: TextStyle(color: palette.text))),
-                          DataCell(Text(i.risque, style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600))),
-                          DataCell(Text(i.action, style: TextStyle(color: palette.text))),
+                          DataCell(
+                            Text(
+                              i.medicaments,
+                              style: TextStyle(color: palette.text),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              i.risque,
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              i.action,
+                              style: TextStyle(color: palette.text),
+                            ),
+                          ),
                         ],
                       ),
                     )
@@ -444,10 +641,30 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
 
   Widget _buildPosologyAndConseils(ThemeColors palette, Color accent) {
     final cards = [
-      _infoCard('Douleur légère', 'Paracétamol 500mg toutes les 6h, max 3g/j', Icons.vaccines, accent),
-      _infoCard('Enfant >6 ans', 'Cétirizine 5mg le soir, surveiller somnolence', Icons.child_care, Colors.indigo),
-      _infoCard('Grossesse', 'Paracétamol privilégié, éviter AINS T3', Icons.pregnant_woman, Colors.pink),
-      _infoCard('Allergies', 'Prévenir antihistaminiques sédatifs + alcool', Icons.warning, Colors.orange),
+      _infoCard(
+        'Douleur légère',
+        'Paracétamol 500mg toutes les 6h, max 3g/j',
+        Icons.vaccines,
+        accent,
+      ),
+      _infoCard(
+        'Enfant >6 ans',
+        'Cétirizine 5mg le soir, surveiller somnolence',
+        Icons.child_care,
+        Colors.indigo,
+      ),
+      _infoCard(
+        'Grossesse',
+        'Paracétamol privilégié, éviter AINS T3',
+        Icons.pregnant_woman,
+        Colors.pink,
+      ),
+      _infoCard(
+        'Allergies',
+        'Prévenir antihistaminiques sédatifs + alcool',
+        Icons.warning,
+        Colors.orange,
+      ),
     ];
 
     return _card(
@@ -461,15 +678,18 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               children: [
                 Icon(Icons.menu_book, color: accent),
                 const SizedBox(width: 8),
-                Text('Posologies & Conseils', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                Text(
+                  'Posologies & Conseils',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: cards,
-            ),
+            Wrap(spacing: 12, runSpacing: 12, children: cards),
           ],
         ),
       ),
@@ -492,7 +712,12 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
             children: [
               Icon(icon, color: color),
               const SizedBox(width: 8),
-              Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color))),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -515,9 +740,19 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Fiches patient imprimables', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                  Text(
+                    'Fiches patient imprimables',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: palette.text,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text('Générez une fiche avec posologie, conseils, interactions et signatures.', style: TextStyle(color: palette.subText)),
+                  Text(
+                    'Générez une fiche avec posologie, conseils, interactions et signatures.',
+                    style: TextStyle(color: palette.subText),
+                  ),
                 ],
               ),
             ),
@@ -527,8 +762,13 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
               label: const Text('Imprimer'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: accent,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -546,7 +786,9 @@ class _ConseilPharmaScreenState extends State<ConseilPharmaScreen> with SingleTi
         border: Border.all(color: palette.divider),
         boxShadow: [
           BoxShadow(
-            color: palette.isDark ? Colors.black.withOpacity(0.25) : Colors.grey.withOpacity(0.15),
+            color: palette.isDark
+                ? Colors.black.withOpacity(0.25)
+                : Colors.grey.withOpacity(0.15),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -582,5 +824,9 @@ class _Interaction {
   final String risque;
   final String action;
 
-  const _Interaction({required this.medicaments, required this.risque, required this.action});
+  const _Interaction({
+    required this.medicaments,
+    required this.risque,
+    required this.action,
+  });
 }

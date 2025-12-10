@@ -1,8 +1,12 @@
 // screens/inventaire.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../app_theme.dart';
 import 'package:intl/intl.dart';
+
+import '../models/inventory_models.dart';
+import '../services/inventory_service.dart';
+import '../services/auth_service.dart';
+import '../models/app_user.dart';
 
 class InventaireScreen extends StatefulWidget {
   const InventaireScreen({super.key});
@@ -27,108 +31,14 @@ class _InventaireScreenState extends State<InventaireScreen>
   String _filtreVue = 'Tous'; // Tous, Écarts, Excédents, Manquants
   String _triPar = 'Scan'; // Scan, Nom, Écart, Valeur
 
-  final List<InventaireLigne> _lignes = [];
+  final List<InventoryLine> _lignes = [];
   final Set<String> _produitsScannes = {};
-
-  // Base de données simulée enrichie
-  final Map<String, ProduitInventaire> _stocksTheoriques = {
-    '3400930213456': ProduitInventaire(
-      nom: 'Doliprane 1000mg',
-      stockTheorique: 465,
-      prixAchat: 2500,
-      prixVente: 3500,
-      lot: 'L2024A123',
-      peremption: DateTime(2026, 8, 15),
-      categorie: 'Antalgiques',
-      emplacement: 'A1-B3',
-    ),
-    '3400937891234': ProduitInventaire(
-      nom: 'Amoxicilline 1g',
-      stockTheorique: 23,
-      prixAchat: 5200,
-      prixVente: 7500,
-      lot: 'L2024B456',
-      peremption: DateTime(2025, 12, 30),
-      categorie: 'Antibiotiques',
-      emplacement: 'B2-C1',
-    ),
-    '3400934567890': ProduitInventaire(
-      nom: 'Spasfon 80mg',
-      stockTheorique: 0,
-      prixAchat: 3800,
-      prixVente: 5200,
-      lot: 'L2024C789',
-      peremption: DateTime(2026, 3, 20),
-      categorie: 'Antispasmodiques',
-      emplacement: 'A3-D2',
-    ),
-    '3400931122334': ProduitInventaire(
-      nom: 'Gaviscon Sachet',
-      stockTheorique: 162,
-      prixAchat: 1800,
-      prixVente: 2800,
-      lot: 'L2024D012',
-      peremption: DateTime(2026, 6, 10),
-      categorie: 'Digestifs',
-      emplacement: 'C1-A2',
-    ),
-    '3400934455667': ProduitInventaire(
-      nom: 'Efferalgan 500mg',
-      stockTheorique: 289,
-      prixAchat: 2200,
-      prixVente: 3200,
-      lot: 'L2024E345',
-      peremption: DateTime(2026, 9, 5),
-      categorie: 'Antalgiques',
-      emplacement: 'A1-B5',
-    ),
-    '3400938765432': ProduitInventaire(
-      nom: 'Advil 400mg',
-      stockTheorique: 156,
-      prixAchat: 3500,
-      prixVente: 4800,
-      lot: 'L2024F678',
-      peremption: DateTime(2026, 4, 18),
-      categorie: 'Anti-inflammatoires',
-      emplacement: 'A2-C3',
-    ),
-  };
-
-  final List<InventaireHistorique> _historique = [
-    InventaireHistorique(
-      id: 'INV-2025-06',
-      date: DateTime(2025, 6, 15),
-      type: 'Complet',
-      ecartValeur: -185000,
-      ecartQte: -45,
-      nbProduits: 1248,
-      statut: 'Validé',
-      responsable: 'Marie K.',
-      duree: const Duration(hours: 3, minutes: 45),
-    ),
-    InventaireHistorique(
-      id: 'INV-2025-05',
-      date: DateTime(2025, 5, 20),
-      type: 'Partiel',
-      ecartValeur: 42000,
-      ecartQte: 12,
-      nbProduits: 456,
-      statut: 'Validé',
-      responsable: 'Jean A.',
-      duree: const Duration(hours: 1, minutes: 30),
-    ),
-    InventaireHistorique(
-      id: 'INV-2025-04',
-      date: DateTime(2025, 4, 10),
-      type: 'Tournant',
-      ecartValeur: -28000,
-      ecartQte: -8,
-      nbProduits: 189,
-      statut: 'Validé',
-      responsable: 'Sophie L.',
-      duree: const Duration(minutes: 45),
-    ),
-  ];
+  List<InventoryProductSnapshot> _stockSnapshots = [];
+  final Map<String, InventoryProductSnapshot> _snapshotByCode = {};
+  final Map<String, InventoryProductSnapshot> _snapshotById = {};
+  List<InventorySummary> _historique = [];
+  bool _loadingStocks = true;
+  AppUser? _inventoryUser;
 
   @override
   void initState() {
@@ -142,6 +52,7 @@ class _InventaireScreenState extends State<InventaireScreen>
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
+    _loadInventoryData();
   }
 
   @override
@@ -153,11 +64,121 @@ class _InventaireScreenState extends State<InventaireScreen>
     super.dispose();
   }
 
-  void _demarrerInventaire() {
+  Future<void> _demarrerInventaire() async {
+    final authOk = await _promptInventoryAuthentication();
+    if (!authOk) return;
+    if (_inventoryUser != null) {
+      _responsable = _inventoryUser!.name;
+    }
     showDialog(
       context: context,
       builder: (context) => _dialogueConfigInventaire(),
     );
+  }
+
+  Future<void> _loadInventoryData() async {
+    setState(() => _loadingStocks = true);
+    final snapshots = await InventoryService.instance.fetchStockSnapshots();
+    final history = await InventoryService.instance.fetchHistory();
+    if (!mounted) return;
+    _snapshotByCode.clear();
+    _snapshotById.clear();
+    for (final snapshot in snapshots) {
+      final key = snapshot.code.trim().toUpperCase();
+      if (key.isNotEmpty) {
+        _snapshotByCode[key] = snapshot;
+      }
+      if (snapshot.medicamentId.isNotEmpty) {
+        _snapshotById[snapshot.medicamentId] = snapshot;
+        _snapshotById[snapshot.medicamentId.toUpperCase()] = snapshot;
+      }
+    }
+    setState(() {
+      _stockSnapshots = snapshots;
+      _historique = history;
+      _loadingStocks = false;
+    });
+  }
+
+  Future<bool> _promptInventoryAuthentication() async {
+    final identifierCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    String? errorMessage;
+    bool loading = false;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Authentification requise'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: identifierCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Identifiant (email ou ID)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passwordCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Mot de passe',
+                    ),
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: loading
+                      ? null
+                      : () => Navigator.of(context).pop(false),
+                  child: const Text('ANNULER'),
+                ),
+                ElevatedButton(
+                  onPressed: loading
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            loading = true;
+                            errorMessage = null;
+                          });
+                          final user = await AuthService.instance.login(
+                            identifierCtrl.text.trim(),
+                            passwordCtrl.text,
+                            rememberMe: false,
+                          );
+                          if (user == null) {
+                            setDialogState(() {
+                              loading = false;
+                              errorMessage = 'Identifiants invalides';
+                            });
+                            return;
+                          }
+                          _inventoryUser = user;
+                          setDialogState(() => loading = false);
+                          Navigator.of(context).pop(true);
+                        },
+                  child: const Text('VALIDER'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    return result == true;
   }
 
   Widget _dialogueConfigInventaire() {
@@ -243,15 +264,19 @@ class _InventaireScreenState extends State<InventaireScreen>
     final code = _scanController.text.trim();
     if (code.isEmpty) return;
 
-    final produit = _stocksTheoriques[code];
-    if (produit == null) {
+    final normalized = code.trim().toUpperCase();
+    final produit =
+        _snapshotByCode[normalized] ??
+        _snapshotById[code] ??
+        _snapshotById[normalized];
+    if (produit == null || produit.name.isEmpty) {
       _afficherErreur('Produit inconnu - Code: $code');
       _scanController.clear();
       return;
     }
 
     // Vérification si déjà scanné
-    if (_produitsScannes.contains(code)) {
+    if (_produitsScannes.contains(produit.code)) {
       _afficherInfo('Produit déjà en inventaire - utilisez les boutons +/-');
       _scanController.clear();
       _focusOnScan();
@@ -263,24 +288,25 @@ class _InventaireScreenState extends State<InventaireScreen>
 
     setState(() {
       _lignes.add(
-        InventaireLigne(
-          code: code,
-          nom: produit.nom,
-          qtyTheorique: produit.stockTheorique,
+        InventoryLine(
+          medicamentId: produit.medicamentId,
+          code: produit.code,
+          name: produit.name,
+          qtyTheorique: produit.theoreticalQty,
           qtyReelle: qty,
-          prixAchat: produit.prixAchat,
-          prixVente: produit.prixVente,
+          prixAchat: produit.purchasePrice,
+          prixVente: produit.salePrice,
           lot: produit.lot,
-          peremption: produit.peremption,
-          categorie: produit.categorie,
-          emplacement: produit.emplacement,
+          peremption: produit.expiry ?? DateTime.now(),
+          categorie: produit.category,
+          emplacement: produit.location,
           dateAjout: DateTime.now(),
         ),
       );
-      _produitsScannes.add(code);
+      _produitsScannes.add(produit.code);
     });
 
-    _afficherSucces('${produit.nom} ajouté (Qté: $qty)');
+    _afficherSucces('${produit.name} ajouté (Qté: $qty)');
     _scanController.clear();
     _qtyController.clear();
     _focusOnScan();
@@ -296,45 +322,72 @@ class _InventaireScreenState extends State<InventaireScreen>
   Widget _dialogueSaisieManuelle() {
     String? codeSelectionne;
     final qtyManuelleCtrl = TextEditingController();
+    String searchTerm = '';
 
     return AlertDialog(
       title: const Text('Saisie manuelle'),
       content: StatefulBuilder(
-        builder: (context, setStateDialog) => SizedBox(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Sélectionner un produit',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.medication),
+        builder: (context, setStateDialog) {
+          final seenCodes = <String>{};
+          final query = searchTerm.trim().toLowerCase();
+          final availableOptions = _stockSnapshots.where((snap) {
+            final code = snap.code.trim().toUpperCase();
+            if (code.isEmpty || _produitsScannes.contains(code)) return false;
+            if (seenCodes.contains(code)) return false;
+            seenCodes.add(code);
+            if (query.isNotEmpty) {
+              final searchable =
+                  '${snap.name.toLowerCase()} ${code.toLowerCase()}';
+              if (!searchable.contains(query)) return false;
+            }
+            return true;
+          }).toList();
+          return SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  decoration: InputDecoration(
+                    labelText: 'Rechercher un produit',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: (value) =>
+                      setStateDialog(() => searchTerm = value),
                 ),
-                items: _stocksTheoriques.entries
-                    .map(
-                      (e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text('${e.value.nom} (${e.key})'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setStateDialog(() => codeSelectionne = value),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: qtyManuelleCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Quantité réelle',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.numbers),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'Sélectionner un produit',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.medication),
+                  ),
+                  items: availableOptions
+                      .map(
+                        (e) => DropdownMenuItem(
+                          value: e.code,
+                          child: Text('${e.name} (${e.code})'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setStateDialog(() => codeSelectionne = value),
                 ),
-              ),
-            ],
-          ),
-        ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: qtyManuelleCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantité réelle',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.numbers),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
       actions: [
         TextButton(
@@ -412,8 +465,8 @@ class _InventaireScreenState extends State<InventaireScreen>
     );
   }
 
-  List<InventaireLigne> get _lignesFiltrees {
-    var lignes = List<InventaireLigne>.from(_lignes);
+  List<InventoryLine> get _lignesFiltrees {
+    var lignes = List<InventoryLine>.from(_lignes);
 
     // Filtrage
     switch (_filtreVue) {
@@ -431,7 +484,7 @@ class _InventaireScreenState extends State<InventaireScreen>
     // Tri
     switch (_triPar) {
       case 'Nom':
-        lignes.sort((a, b) => a.nom.compareTo(b.nom));
+        lignes.sort((a, b) => a.name.compareTo(b.name));
         break;
       case 'Écart':
         lignes.sort((a, b) => b.ecart.abs().compareTo(a.ecart.abs()));
@@ -585,6 +638,14 @@ class _InventaireScreenState extends State<InventaireScreen>
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 15, color: palette.subText),
             ),
+            const SizedBox(height: 12),
+            Text(
+              '${_stockSnapshots.length} produits suivis',
+              style: TextStyle(
+                fontSize: 13,
+                color: palette.subText.withOpacity(0.8),
+              ),
+            ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: _demarrerInventaire,
@@ -613,6 +674,12 @@ class _InventaireScreenState extends State<InventaireScreen>
   }
 
   Widget _buildInventaireEnCours(ThemeColors palette, Color accent) {
+    if (_loadingStocks) {
+      return SizedBox(
+        height: 420,
+        child: Center(child: CircularProgressIndicator(color: accent)),
+      );
+    }
     return Column(
       children: [
         Row(
@@ -1048,7 +1115,7 @@ class _InventaireScreenState extends State<InventaireScreen>
   }
 
   Widget _ligneInventaire(
-    InventaireLigne ligne,
+    InventoryLine ligne,
     ThemeColors palette,
     Color accent,
     int index,
@@ -1081,7 +1148,7 @@ class _InventaireScreenState extends State<InventaireScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  ligne.nom,
+                  ligne.name,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -1434,20 +1501,27 @@ class _InventaireScreenState extends State<InventaireScreen>
           const Divider(height: 1),
           SizedBox(
             height: 320,
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _historique.length,
-              itemBuilder: (context, index) {
-                return _carteHistorique(_historique[index], palette);
-              },
-            ),
+            child: _historique.isEmpty
+                ? Center(
+                    child: Text(
+                      'Aucun inventaire enregistré',
+                      style: TextStyle(color: palette.subText),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _historique.length,
+                    itemBuilder: (context, index) {
+                      return _carteHistorique(_historique[index], palette);
+                    },
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _carteHistorique(InventaireHistorique inv, ThemeColors palette) {
+  Widget _carteHistorique(InventorySummary inv, ThemeColors palette) {
     final ecartColor = inv.ecartValeur >= 0 ? Colors.green : Colors.red;
 
     return Container(
@@ -1471,7 +1545,7 @@ class _InventaireScreenState extends State<InventaireScreen>
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: Colors.blue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -1479,7 +1553,7 @@ class _InventaireScreenState extends State<InventaireScreen>
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                    color: Colors.blue,
                   ),
                 ),
               ),
@@ -1500,21 +1574,21 @@ class _InventaireScreenState extends State<InventaireScreen>
             ],
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
             children: [
               _buildInfoPastille('Type', inv.type, Icons.category, Colors.blue),
-              const SizedBox(width: 16),
               _buildInfoPastille(
                 'Produits',
                 '${inv.nbProduits}',
                 Icons.inventory,
                 Colors.purple,
               ),
-              const SizedBox(width: 16),
               _buildInfoPastille(
-                'Durée',
-                '${inv.duree.inHours}h${inv.duree.inMinutes.remainder(60)}m',
-                Icons.timer,
+                'Responsable',
+                inv.responsable,
+                Icons.person,
                 Colors.orange,
               ),
             ],
@@ -1522,15 +1596,8 @@ class _InventaireScreenState extends State<InventaireScreen>
           const SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.person, size: 16, color: palette.subText),
-              const SizedBox(width: 6),
               Text(
-                inv.responsable,
-                style: TextStyle(fontSize: 13, color: palette.subText),
-              ),
-              const Spacer(),
-              Text(
-                'Écart: ',
+                'Écart valorisation: ',
                 style: TextStyle(fontSize: 13, color: palette.subText),
               ),
               Text(
@@ -1541,8 +1608,9 @@ class _InventaireScreenState extends State<InventaireScreen>
                   color: ecartColor,
                 ),
               ),
+              const SizedBox(width: 12),
               Text(
-                ' (${inv.ecartQte >= 0 ? '+' : ''}${inv.ecartQte} unités)',
+                '(${inv.ecartQte >= 0 ? '+' : ''}${inv.ecartQte} unités)',
                 style: TextStyle(fontSize: 12, color: palette.subText),
               ),
             ],
@@ -1588,7 +1656,7 @@ class _InventaireScreenState extends State<InventaireScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              ligne.nom,
+              ligne.name,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -1634,7 +1702,7 @@ class _InventaireScreenState extends State<InventaireScreen>
       builder: (context) => AlertDialog(
         title: const Text('Supprimer ce produit ?'),
         content: Text(
-          'Êtes-vous sûr de vouloir retirer "${ligne.nom}" de l\'inventaire ?',
+          'Êtes-vous sûr de vouloir retirer "${ligne.name}" de l\'inventaire ?',
         ),
         actions: [
           TextButton(
@@ -1662,13 +1730,13 @@ class _InventaireScreenState extends State<InventaireScreen>
     _afficherInfo('Export en cours... (fonctionnalité à implémenter)');
   }
 
-  void _validerInventaire() {
+  Future<void> _validerInventaire() async {
     if (_lignes.isEmpty) {
       _afficherErreur('Aucun produit à valider');
       return;
     }
 
-    showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Valider l\'inventaire'),
@@ -1692,28 +1760,35 @@ class _InventaireScreenState extends State<InventaireScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('ANNULER'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _inventaireEnCours = false;
-                _lignes.clear();
-                _produitsScannes.clear();
-              });
-              _afficherSucces('Inventaire validé avec succès');
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text('VALIDER'),
           ),
         ],
       ),
     );
+
+    if (confirmed != true) return;
+
+    await InventoryService.instance.saveInventory(
+      type: _typeInventaire,
+      responsable: _responsable.isNotEmpty ? _responsable : 'Équipe',
+      lines: List<InventoryLine>.from(_lignes),
+    );
+    _afficherSucces('Inventaire validé avec succès');
+    setState(() {
+      _inventaireEnCours = false;
+      _lignes.clear();
+      _produitsScannes.clear();
+    });
+    await _loadInventoryData();
   }
 
-  void _annulerInventaire() {
+  Future<void> _annulerInventaire() async {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1727,7 +1802,7 @@ class _InventaireScreenState extends State<InventaireScreen>
             child: const Text('NON'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
               setState(() {
                 _inventaireEnCours = false;
@@ -1735,6 +1810,7 @@ class _InventaireScreenState extends State<InventaireScreen>
                 _produitsScannes.clear();
               });
               _afficherInfo('Inventaire annulé');
+              await _loadInventoryData();
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('OUI, ANNULER'),
@@ -1760,81 +1836,4 @@ class _InventaireScreenState extends State<InventaireScreen>
   String _formatMontant(int montant) {
     return NumberFormat('#,###', 'fr_FR').format(montant);
   }
-}
-
-// Classes de modèle
-class InventaireLigne {
-  final String code;
-  final String nom;
-  final int qtyTheorique;
-  int qtyReelle;
-  final int prixAchat;
-  final int prixVente;
-  final String lot;
-  final DateTime peremption;
-  final String categorie;
-  final String emplacement;
-  final DateTime dateAjout;
-
-  InventaireLigne({
-    required this.code,
-    required this.nom,
-    required this.qtyTheorique,
-    required this.qtyReelle,
-    required this.prixAchat,
-    required this.prixVente,
-    required this.lot,
-    required this.peremption,
-    required this.categorie,
-    required this.emplacement,
-    required this.dateAjout,
-  });
-
-  int get ecart => qtyReelle - qtyTheorique;
-}
-
-class ProduitInventaire {
-  final String nom;
-  final int stockTheorique;
-  final int prixAchat;
-  final int prixVente;
-  final String lot;
-  final DateTime peremption;
-  final String categorie;
-  final String emplacement;
-
-  ProduitInventaire({
-    required this.nom,
-    required this.stockTheorique,
-    required this.prixAchat,
-    required this.prixVente,
-    required this.lot,
-    required this.peremption,
-    required this.categorie,
-    required this.emplacement,
-  });
-}
-
-class InventaireHistorique {
-  final String id;
-  final DateTime date;
-  final String type;
-  final int ecartValeur;
-  final int ecartQte;
-  final int nbProduits;
-  final String statut;
-  final String responsable;
-  final Duration duree;
-
-  InventaireHistorique({
-    required this.id,
-    required this.date,
-    required this.type,
-    required this.ecartValeur,
-    required this.ecartQte,
-    required this.nbProduits,
-    required this.statut,
-    required this.responsable,
-    required this.duree,
-  });
 }

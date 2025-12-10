@@ -77,7 +77,10 @@ class RecentActivity extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [item.statusColor.withOpacity(0.2), item.statusColor.withOpacity(0.4)],
+                colors: [
+                  item.statusColor.withOpacity(0.2),
+                  item.statusColor.withOpacity(0.4),
+                ],
               ),
               borderRadius: BorderRadius.circular(12),
             ),
@@ -98,10 +101,7 @@ class RecentActivity extends StatelessWidget {
                 ),
                 Text(
                   item.subtitle,
-                  style: TextStyle(
-                    color: subTextColor,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: subTextColor, fontSize: 14),
                 ),
               ],
             ),

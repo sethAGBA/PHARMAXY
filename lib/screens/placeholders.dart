@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import '../app_theme.dart';
 
 class PlaceholderSection extends StatelessWidget {
-  const PlaceholderSection({required this.title, required this.description, super.key});
+  const PlaceholderSection({
+    required this.title,
+    required this.description,
+    super.key,
+  });
 
   final String title;
   final String description;
@@ -16,11 +20,19 @@ class PlaceholderSection extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.dashboard_customize_outlined, size: 48, color: Colors.tealAccent),
+            const Icon(
+              Icons.dashboard_customize_outlined,
+              size: 48,
+              color: Colors.tealAccent,
+            ),
             const SizedBox(height: 16),
             Text(
               title,
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: palette.text),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: palette.text,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),

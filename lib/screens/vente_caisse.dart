@@ -1,9 +1,18 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:printing/printing.dart';
+
 import '../app_theme.dart';
+import '../models/caisse_settings.dart';
 import '../models/sale_models.dart';
+import '../services/local_database_service.dart';
 import '../services/product_service.dart';
 import '../services/sales_service.dart';
+import '../services/ticket_service.dart';
 
 class VenteCaisseScreen extends StatefulWidget {
   const VenteCaisseScreen({super.key});
@@ -16,16 +25,25 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _barcodeController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _historySearchController = TextEditingController();
+  final TextEditingController _historySearchController =
+      TextEditingController();
   final List<CartItem> _cartItems = [];
   List<Product> _availableProducts = [];
-  Product? _selectedProduct;
-
   double _remisePercentage = 0;
   String _selectedPaymentMethod = 'Espèces';
   late AnimationController _animationController;
   List<SaleRecord> _salesHistory = [];
   bool _loading = true;
+  final TextEditingController _clientInfoController = TextEditingController();
+  bool _printCustomerReceipt = true;
+  String _clientFieldLabel = 'Client';
+  String _currency = 'FCFA';
+  String? _logoPath;
+  String _pharmacyName = 'Pharmacie PHARMAXY';
+  String _pharmacyAddress = '';
+  String _pharmacyPhone = '';
+  String _pharmacyEmail = '';
+  String _pharmacyOrderNumber = '';
 
   @override
   void initState() {
@@ -35,15 +53,34 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
       duration: const Duration(milliseconds: 500),
     )..forward();
     _loadData();
+    _loadSettings();
   }
 
   Future<void> _loadData() async {
     final products = await ProductService.instance.fetchProductsForSale();
     final history = await SalesService.instance.fetchSalesHistory(limit: 30);
+    final CaisseSettings caisse = await LocalDatabaseService.instance
+        .getCaisseSettings();
     setState(() {
       _availableProducts = products;
       _salesHistory = history;
       _loading = false;
+      _printCustomerReceipt = caisse.printCustomerReceipt;
+      _clientFieldLabel = caisse.customerField;
+    });
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = await LocalDatabaseService.instance.getSettings();
+    if (!mounted) return;
+    setState(() {
+      _currency = settings.currency;
+      _logoPath = settings.logoPath;
+      _pharmacyName = settings.pharmacyName;
+      _pharmacyAddress = settings.pharmacyAddress;
+      _pharmacyPhone = settings.pharmacyPhone;
+      _pharmacyEmail = settings.pharmacyEmail;
+      _pharmacyOrderNumber = settings.pharmacyOrderNumber;
     });
   }
 
@@ -53,17 +90,20 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     _searchController.dispose();
     _historySearchController.dispose();
     _animationController.dispose();
+    _clientInfoController.dispose();
     super.dispose();
   }
 
-  double get _sousTotal => _cartItems.fold(0, (sum, item) => sum + (item.price * item.quantity));
+  double get _sousTotal =>
+      _cartItems.fold(0, (sum, item) => sum + (item.price * item.quantity));
   double get _montantRemise => _sousTotal * (_remisePercentage / 100);
   double get _total => _sousTotal - _montantRemise;
 
   List<Product> get _filteredProducts {
     final search = _searchController.text.toLowerCase();
     final filtered = _availableProducts.where((p) {
-      return p.name.toLowerCase().contains(search) || p.barcode.contains(search);
+      return p.name.toLowerCase().contains(search) ||
+          p.barcode.contains(search);
     }).toList();
     filtered.sort((a, b) => a.name.compareTo(b.name));
     return filtered;
@@ -74,18 +114,45 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     return _salesHistory.where((sale) {
       return sale.id.toLowerCase().contains(search) ||
           sale.paymentMethod.toLowerCase().contains(search) ||
-          (sale.customer?.toLowerCase().contains(search) ?? false);
+          (sale.customer?.toLowerCase().contains(search) ?? false) ||
+          (sale.vendor?.toLowerCase().contains(search) ?? false);
     }).toList();
   }
 
   void _addToCart(Product product) {
+    if (product.availableStock <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Stock épuisé pour ${product.name}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+    final existingIndex = _cartItems.indexWhere(
+      (item) => item.productId == product.id,
+    );
+    final currentQty = existingIndex != -1
+        ? _cartItems[existingIndex].quantity
+        : 0;
+    if (currentQty >= product.availableStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Stock limité à ${product.availableStock} pour ce produit',
+          ),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
     setState(() {
-      final existingIndex = _cartItems.indexWhere((item) => item.barcode == product.barcode);
       if (existingIndex != -1) {
         _cartItems[existingIndex].quantity++;
       } else {
         _cartItems.add(
           CartItem(
+            productId: product.id,
             name: product.name,
             barcode: product.barcode,
             price: product.price,
@@ -103,6 +170,17 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
   }
 
   void _updateQuantity(int index, int newQuantity) {
+    final item = _cartItems[index];
+    final availableStock = _availableStockForItem(item, newQuantity);
+    if (availableStock > 0 && newQuantity > availableStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Stock limité à $availableStock pour ${item.name}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
     setState(() {
       if (newQuantity > 0) {
         _cartItems[index].quantity = newQuantity;
@@ -117,7 +195,14 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     if (barcode.isEmpty) return;
     final product = _availableProducts.firstWhere(
       (p) => p.barcode == barcode,
-      orElse: () => Product('Produit introuvable', '', 0, ''),
+      orElse: () => const Product(
+        id: '',
+        name: 'Produit introuvable',
+        barcode: '',
+        price: 0,
+        category: '',
+        availableStock: 0,
+      ),
     );
     if (product.price > 0) {
       _addToCart(product);
@@ -147,16 +232,43 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     });
   }
 
-  void _completeTransaction() {
+  Future<void> _completeTransaction() async {
     final saleId = 'CMD-${DateTime.now().millisecondsSinceEpoch}';
-    SalesService.instance.recordSale(
-      id: saleId,
-      total: _total,
-      paymentMethod: _selectedPaymentMethod,
-      type: 'Vente comptoir',
-      clientId: '',
-    );
-    _loadData();
+    final clientInfo = _clientInfoController.text.trim();
+    final receiptTotal = _total;
+    final cartSnapshot = List<CartItem>.from(_cartItems);
+    try {
+      await SalesService.instance.recordSale(
+        id: saleId,
+        total: _total,
+        paymentMethod: _selectedPaymentMethod,
+        type: 'Vente comptoir',
+        clientId: clientInfo.isEmpty ? null : clientInfo,
+        items: cartSnapshot,
+      );
+    } on StockException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible de finaliser la vente'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    await _loadData();
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Paiement effectué avec succès'),
@@ -164,7 +276,27 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         duration: Duration(seconds: 2),
       ),
     );
+    final receiptItems = cartSnapshot;
     _clearCart();
+    if (_printCustomerReceipt) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Ticket client généré ${clientInfo.isNotEmpty ? 'pour $clientInfo' : ''}',
+          ),
+          backgroundColor: const Color(0xFF3B82F6),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      _showReceiptDialog(
+        id: saleId,
+        clientInfo: clientInfo,
+        total: receiptTotal,
+        paymentMethod: _selectedPaymentMethod,
+        items: receiptItems,
+      );
+    }
+    _clientInfoController.clear();
   }
 
   void _processPayment() {
@@ -180,8 +312,102 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     showDialog(context: context, builder: (_) => _buildPaymentDialog());
   }
 
-  void _selectProduct(Product product) {
-    setState(() => _selectedProduct = product);
+  void _showReceiptDialog({
+    required String id,
+    required String clientInfo,
+    required double total,
+    required String paymentMethod,
+    required List<CartItem> items,
+  }) {
+    final palette = ThemeColors.from(context);
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Ticket client'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pharmacie PHARMAXY',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: palette.text,
+                ),
+              ),
+              Text('Ticket #$id', style: TextStyle(color: palette.subText)),
+              const SizedBox(height: 12),
+              if (items.isNotEmpty)
+                ...items.map(
+                  (item) => Text(
+                    '${item.name} x${item.quantity} • ${(item.price * item.quantity).toStringAsFixed(0)} FCFA',
+                  ),
+                ),
+              if (items.isEmpty)
+                Text(
+                  'Aucun détail reçu',
+                  style: TextStyle(color: palette.subText),
+                ),
+              const SizedBox(height: 12),
+              Text(
+                'Client: ${clientInfo.isNotEmpty ? clientInfo : 'Générique'}',
+              ),
+              Text('Méthode: $paymentMethod'),
+              Text('Total: ${total.toStringAsFixed(0)} FCFA'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Fermer'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _promptCancelSale(SaleRecord sale) async {
+    final reasonCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Annuler la vente'),
+          content: TextField(
+            controller: reasonCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Motif de l\'annulation',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (reasonCtrl.text.trim().isEmpty) return;
+                Navigator.of(context).pop(true);
+              },
+              child: const Text('Confirmer'),
+            ),
+          ],
+        );
+      },
+    );
+    if (result == true) {
+      await SalesService.instance.cancelSale(sale.id, reasonCtrl.text.trim());
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vente annulée'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 
   @override
@@ -257,7 +483,9 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF34D399)]),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF10B981), Color(0xFF34D399)],
+            ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
@@ -311,9 +539,14 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                   decoration: InputDecoration(
                     hintText: 'Scannez ou saisissez le code-barres',
                     hintStyle: TextStyle(color: palette.subText),
-                    prefixIcon: const Icon(Icons.qr_code_scanner, color: Color(0xFF10B981)),
+                    prefixIcon: const Icon(
+                      Icons.qr_code_scanner,
+                      color: Color(0xFF10B981),
+                    ),
                     filled: true,
-                    fillColor: palette.isDark ? Colors.grey[800] : Colors.grey[200],
+                    fillColor: palette.isDark
+                        ? Colors.grey[800]
+                        : Colors.grey[200],
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
@@ -329,7 +562,9 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF10B981),
                   padding: const EdgeInsets.all(18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: const Icon(Icons.add_shopping_cart, size: 26),
               ),
@@ -376,7 +611,8 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                 mainAxisSpacing: 12,
               ),
               itemCount: products.length,
-              itemBuilder: (context, index) => _buildProductCard(products[index], palette),
+              itemBuilder: (context, index) =>
+                  _buildProductCard(products[index], palette),
             ),
           ),
         ],
@@ -407,7 +643,11 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
               const SizedBox(height: 8),
               Text(
                 product.name,
-                style: TextStyle(color: palette.text, fontWeight: FontWeight.w600, fontSize: 13),
+                style: TextStyle(
+                  color: palette.text,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -419,6 +659,14 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                   color: Color(0xFF10B981),
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Disponible: ${product.availableStock}',
+                style: TextStyle(
+                  color: palette.subText,
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -450,12 +698,19 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
             children: [
               Text(
                 'Panier (${_cartItems.length})',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: palette.text,
+                ),
               ),
               if (_cartItems.isNotEmpty)
                 IconButton(
                   onPressed: _clearCart,
-                  icon: const Icon(Icons.delete_sweep, color: Color(0xFFEF4444)),
+                  icon: const Icon(
+                    Icons.delete_sweep,
+                    color: Color(0xFFEF4444),
+                  ),
                   tooltip: 'Vider le panier',
                 ),
             ],
@@ -467,15 +722,26 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.shopping_cart_outlined, size: 64, color: palette.subText.withOpacity(0.4)),
+                        Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 64,
+                          color: palette.subText.withOpacity(0.4),
+                        ),
                         const SizedBox(height: 16),
-                        Text('Panier vide', style: TextStyle(color: palette.subText, fontSize: 18)),
+                        Text(
+                          'Panier vide',
+                          style: TextStyle(
+                            color: palette.subText,
+                            fontSize: 18,
+                          ),
+                        ),
                       ],
                     ),
                   )
                 : ListView.builder(
                     itemCount: _cartItems.length,
-                    itemBuilder: (context, index) => _buildCartItem(_cartItems[index], index, palette),
+                    itemBuilder: (context, index) =>
+                        _buildCartItem(_cartItems[index], index, palette),
                   ),
           ),
         ],
@@ -508,12 +774,17 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                       hintStyle: TextStyle(color: palette.subText),
                       prefixIcon: const Icon(Icons.search, size: 20),
                       filled: true,
-                      fillColor: palette.isDark ? Colors.grey[800] : Colors.grey[200],
+                      fillColor: palette.isDark
+                          ? Colors.grey[800]
+                          : Colors.grey[200],
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
@@ -527,7 +798,10 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text('Aucune vente enregistrée', style: TextStyle(color: palette.subText)),
+                  child: Text(
+                    'Aucune vente enregistrée',
+                    style: TextStyle(color: palette.subText),
+                  ),
                 ),
               )
             else
@@ -539,7 +813,8 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                     Expanded(
                       child: ListView.builder(
                         itemCount: history.length,
-                        itemBuilder: (context, index) => _historyDataRow(history[index], palette),
+                        itemBuilder: (context, index) =>
+                            _historyDataRow(history[index], palette),
                       ),
                     ),
                   ],
@@ -559,6 +834,7 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         _historyCell('Montant', palette, isHeader: true),
         _historyCell('Paiement', palette, isHeader: true),
         _historyCell('Client', palette, isHeader: true),
+        _historyCell('Vendeur', palette, isHeader: true),
         _historyCell('Action', palette, isHeader: true, alignEnd: true),
       ],
     );
@@ -580,13 +856,58 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
           _historyCell('${sale.total.toStringAsFixed(0)} FCFA', palette),
           _historyCell(sale.paymentMethod, palette),
           _historyCell(sale.customer ?? 'Client', palette),
+          _historyCell(sale.vendor ?? 'Vendeur', palette),
           _historyCell(
             '',
             palette,
             alignEnd: true,
-            child: TextButton(
-              onPressed: () {},
-              child: const Text('Ticket'),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (sale.status == 'Annulée')
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Annulée',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (sale.cancellationReason?.isNotEmpty ?? false)
+                          Text(
+                            sale.cancellationReason!,
+                            style: TextStyle(
+                              color: palette.subText,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                PopupMenuButton<String>(
+                  onSelected: (value) => _onHistoryAction(sale, value),
+                  icon: const Icon(Icons.more_vert, size: 18),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'print',
+                      child: Text('Imprimer'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'save',
+                      child: Text('Enregistrer'),
+                    ),
+                    if (sale.status != 'Annulée')
+                      const PopupMenuItem(
+                        value: 'cancel',
+                        child: Text('Annuler'),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -602,7 +923,8 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     bool alignEnd = false,
     Widget? child,
   }) {
-    final content = child ??
+    final content =
+        child ??
         Text(
           text,
           style: TextStyle(
@@ -626,7 +948,9 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
       decoration: BoxDecoration(
         color: palette.isDark ? Colors.grey[800] : Colors.grey[200],
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: palette.isDark ? Colors.white12 : Colors.black12),
+        border: Border.all(
+          color: palette.isDark ? Colors.white12 : Colors.black12,
+        ),
       ),
       child: Row(
         children: [
@@ -634,19 +958,39 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [const Color(0xFF10B981).withOpacity(0.2), const Color(0xFF10B981).withOpacity(0.4)],
+                colors: [
+                  const Color(0xFF10B981).withOpacity(0.2),
+                  const Color(0xFF10B981).withOpacity(0.4),
+                ],
               ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.medication, color: Color(0xFF10B981), size: 24),
+            child: const Icon(
+              Icons.medication,
+              color: Color(0xFF10B981),
+              size: 24,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.name, style: TextStyle(color: palette.text, fontWeight: FontWeight.w600, fontSize: 15)),
-                Text('${item.price.toStringAsFixed(0)} FCFA', style: const TextStyle(color: Color(0xFF10B981), fontSize: 13)),
+                Text(
+                  item.name,
+                  style: TextStyle(
+                    color: palette.text,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+                Text(
+                  '${item.price.toStringAsFixed(0)} FCFA',
+                  style: const TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
@@ -654,29 +998,46 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
             children: [
               IconButton(
                 onPressed: () => _updateQuantity(index, item.quantity - 1),
-                icon: const Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444)),
+                icon: const Icon(
+                  Icons.remove_circle_outline,
+                  color: Color(0xFFEF4444),
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: palette.isDark ? Colors.grey[700] : Colors.grey[300],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '${item.quantity}',
-                  style: TextStyle(color: palette.text, fontWeight: FontWeight.bold, fontSize: 16),
+                  style: TextStyle(
+                    color: palette.text,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
               ),
               IconButton(
                 onPressed: () => _updateQuantity(index, item.quantity + 1),
-                icon: const Icon(Icons.add_circle_outline, color: Color(0xFF10B981)),
+                icon: const Icon(
+                  Icons.add_circle_outline,
+                  color: Color(0xFF10B981),
+                ),
               ),
             ],
           ),
           const SizedBox(width: 8),
           Text(
             '${(item.price * item.quantity).toStringAsFixed(0)} F',
-            style: TextStyle(color: palette.text, fontWeight: FontWeight.bold, fontSize: 16),
+            style: TextStyle(
+              color: palette.text,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
           ),
           const SizedBox(width: 8),
           IconButton(
@@ -697,7 +1058,10 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Remise', style: TextStyle(color: palette.subText, fontSize: 16)),
+              Text(
+                'Remise',
+                style: TextStyle(color: palette.subText, fontSize: 16),
+              ),
               SizedBox(
                 width: 120,
                 child: TextField(
@@ -709,14 +1073,21 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                     suffixText: '%',
                     suffixStyle: TextStyle(color: palette.subText),
                     filled: true,
-                    fillColor: palette.isDark ? Colors.grey[800] : Colors.grey[200],
+                    fillColor: palette.isDark
+                        ? Colors.grey[800]
+                        : Colors.grey[200],
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
-                  onChanged: (value) => setState(() => _remisePercentage = double.tryParse(value) ?? 0),
+                  onChanged: (value) => setState(
+                    () => _remisePercentage = double.tryParse(value) ?? 0,
+                  ),
                 ),
               ),
             ],
@@ -726,19 +1097,69 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
           const SizedBox(height: 16),
           _buildTotalRow('Sous-total', _sousTotal, false, palette),
           const SizedBox(height: 12),
-          _buildTotalRow('Remise', _montantRemise, false, palette, color: const Color(0xFFEF4444)),
+          _buildTotalRow(
+            'Remise',
+            _montantRemise,
+            false,
+            palette,
+            color: const Color(0xFFEF4444),
+          ),
           const SizedBox(height: 16),
           Divider(color: palette.divider, thickness: 2),
           const SizedBox(height: 16),
           _buildTotalRow('TOTAL', _total, true, palette),
           const SizedBox(height: 24),
+          TextField(
+            controller: _clientInfoController,
+            style: TextStyle(color: palette.text),
+            decoration: InputDecoration(
+              labelText: _clientFieldLabel,
+              labelStyle: TextStyle(color: palette.subText),
+              hintText: 'Ex: Jean Dupont - 99XXXXXX',
+              hintStyle: TextStyle(color: palette.subText.withOpacity(0.7)),
+              filled: true,
+              fillColor: palette.isDark ? Colors.grey[900] : Colors.grey[200],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+            ),
+          ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Imprimer ticket client'),
+            value: _printCustomerReceipt,
+            onChanged: (value) => setState(() => _printCustomerReceipt = value),
+          ),
           Row(
             children: [
-              Expanded(child: _buildPaymentMethodButton('Espèces', Icons.money, palette)),
+              Expanded(
+                child: _buildPaymentMethodButton(
+                  'Espèces',
+                  Icons.money,
+                  palette,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _buildPaymentMethodButton('Carte', Icons.credit_card, palette)),
+              Expanded(
+                child: _buildPaymentMethodButton(
+                  'Carte',
+                  Icons.credit_card,
+                  palette,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _buildPaymentMethodButton('Mobile', Icons.phone_android, palette)),
+              Expanded(
+                child: _buildPaymentMethodButton(
+                  'Mobile',
+                  Icons.phone_android,
+                  palette,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -749,7 +1170,9 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
               onPressed: _processPayment,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF10B981),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 8,
                 shadowColor: const Color(0xFF10B981).withOpacity(0.5),
               ),
@@ -760,7 +1183,11 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                   SizedBox(width: 12),
                   Text(
                     'PAYER',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ],
               ),
@@ -771,7 +1198,13 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     );
   }
 
-  Widget _buildTotalRow(String label, double amount, bool isTotal, ThemeColors palette, {Color? color}) {
+  Widget _buildTotalRow(
+    String label,
+    double amount,
+    bool isTotal,
+    ThemeColors palette, {
+    Color? color,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -795,7 +1228,11 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     );
   }
 
-  Widget _buildPaymentMethodButton(String method, IconData icon, ThemeColors palette) {
+  Widget _buildPaymentMethodButton(
+    String method,
+    IconData icon,
+    ThemeColors palette,
+  ) {
     final isSelected = _selectedPaymentMethod == method;
     return GestureDetector(
       onTap: () => setState(() => _selectedPaymentMethod = method),
@@ -803,8 +1240,14 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          gradient: isSelected ? const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF3B82F6)]) : null,
-          color: isSelected ? null : (palette.isDark ? Colors.grey[800] : Colors.grey[200]),
+          gradient: isSelected
+              ? const LinearGradient(
+                  colors: [Color(0xFF3B82F6), Color(0xFF3B82F6)],
+                )
+              : null,
+          color: isSelected
+              ? null
+              : (palette.isDark ? Colors.grey[800] : Colors.grey[200]),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? const Color(0xFF3B82F6) : palette.divider,
@@ -813,7 +1256,11 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         ),
         child: Column(
           children: [
-            Icon(icon, color: isSelected ? Colors.white : palette.subText, size: 24),
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : palette.subText,
+              size: 24,
+            ),
             const SizedBox(height: 4),
             Text(
               method,
@@ -839,12 +1286,17 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         final monnaie = montantDonne - _total;
         return AlertDialog(
           backgroundColor: palette.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               const Icon(Icons.payment, color: Color(0xFF10B981), size: 32),
               const SizedBox(width: 12),
-              Text('Finaliser le Paiement', style: TextStyle(color: palette.text, fontSize: 22)),
+              Text(
+                'Finaliser le Paiement',
+                style: TextStyle(color: palette.text, fontSize: 22),
+              ),
             ],
           ),
           content: SizedBox(
@@ -856,23 +1308,36 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [const Color(0xFF10B981).withOpacity(0.2), const Color(0xFF10B981).withOpacity(0.4)],
+                      colors: [
+                        const Color(0xFF10B981).withOpacity(0.2),
+                        const Color(0xFF10B981).withOpacity(0.4),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     children: [
-                      Text('Montant à payer', style: TextStyle(color: palette.subText, fontSize: 16)),
+                      Text(
+                        'Montant à payer',
+                        style: TextStyle(color: palette.subText, fontSize: 16),
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         '${_total.toStringAsFixed(0)} FCFA',
-                        style: TextStyle(color: palette.text, fontSize: 36, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: palette.text,
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
-                Text('Méthode: $_selectedPaymentMethod', style: TextStyle(color: palette.subText, fontSize: 16)),
+                Text(
+                  'Méthode: $_selectedPaymentMethod',
+                  style: TextStyle(color: palette.subText, fontSize: 16),
+                ),
                 const SizedBox(height: 16),
                 if (_selectedPaymentMethod == 'Espèces') ...[
                   TextField(
@@ -885,26 +1350,38 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                       suffixText: 'FCFA',
                       suffixStyle: TextStyle(color: palette.subText),
                       filled: true,
-                      fillColor: palette.isDark ? Colors.grey[800] : Colors.grey[200],
+                      fillColor: palette.isDark
+                          ? Colors.grey[800]
+                          : Colors.grey[200],
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
                       ),
                     ),
-                    onChanged: (value) => setDialogState(() => montantDonne = double.tryParse(value) ?? 0),
+                    onChanged: (value) => setDialogState(
+                      () => montantDonne = double.tryParse(value) ?? 0,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   if (monnaie >= 0 && montantDonne > 0)
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: palette.isDark ? Colors.grey[800] : Colors.grey[200],
+                        color: palette.isDark
+                            ? Colors.grey[800]
+                            : Colors.grey[200],
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Monnaie à rendre:', style: TextStyle(color: palette.subText, fontSize: 16)),
+                          Text(
+                            'Monnaie à rendre:',
+                            style: TextStyle(
+                              color: palette.subText,
+                              fontSize: 16,
+                            ),
+                          ),
                           Text(
                             '${monnaie.toStringAsFixed(0)} FCFA',
                             style: const TextStyle(
@@ -923,11 +1400,15 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Annuler', style: TextStyle(color: palette.subText, fontSize: 16)),
+              child: Text(
+                'Annuler',
+                style: TextStyle(color: palette.subText, fontSize: 16),
+              ),
             ),
             ElevatedButton(
-              onPressed: () {
-                if (_selectedPaymentMethod == 'Espèces' && montantDonne < _total) {
+              onPressed: () async {
+                if (_selectedPaymentMethod == 'Espèces' &&
+                    montantDonne < _total) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Montant insuffisant'),
@@ -937,15 +1418,32 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                   return;
                 }
                 Navigator.pop(context);
-                _completeTransaction();
+                await _completeTransaction();
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-              child: const Text('Confirmer le Paiement', style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+              ),
+              child: const Text(
+                'Confirmer le Paiement',
+                style: TextStyle(fontSize: 16),
+              ),
             ),
           ],
         );
       },
     );
+  }
+
+  int _availableStockForItem(CartItem item, int fallback) {
+    final product = _findProduct(item.productId);
+    if (product == null) return fallback;
+    return product.availableStock;
+  }
+
+  Product? _findProduct(String? id) {
+    if (id == null || id.isEmpty) return null;
+    final matches = _availableProducts.where((p) => p.id == id);
+    return matches.isEmpty ? null : matches.first;
   }
 
   // Helpers
@@ -966,7 +1464,121 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
   Widget _sectionTitle(String text, ThemeColors palette) {
     return Text(
       text,
-      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: palette.text),
+      style: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: palette.text,
+      ),
     );
+  }
+
+  Future<void> _printSaleReceipt(SaleRecord sale) async {
+    try {
+      final bytes = await TicketService.instance.generateReceipt(
+        saleId: sale.id,
+        client: sale.customer ?? 'Client',
+        total: sale.total,
+        paymentMethod: sale.paymentMethod,
+        items: sale.items,
+        vendor: sale.vendor,
+        logoPath: _logoPath,
+        currency: _currency,
+        pharmacyName: _pharmacyName,
+        pharmacyAddress: _pharmacyAddress,
+        pharmacyPhone: _pharmacyPhone,
+        pharmacyEmail: _pharmacyEmail,
+        pharmacyOrderNumber: _pharmacyOrderNumber,
+      );
+      await Printing.layoutPdf(onLayout: (_) => bytes);
+    } catch (e) {
+      debugPrint('Erreur d\'impression: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur d\'impression: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _savePdfAndOpen(SaleRecord sale) async {
+    final dir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choisissez un dossier de sauvegarde',
+    );
+    if (dir == null) return;
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final receiptPath = '$dir/ticket_${sale.id}_$timestamp.pdf';
+    try {
+      final bytes = await TicketService.instance.generateReceipt(
+        saleId: sale.id,
+        client: sale.customer ?? 'Client',
+        total: sale.total,
+        paymentMethod: sale.paymentMethod,
+        items: sale.items,
+        vendor: sale.vendor,
+        logoPath: _logoPath,
+        currency: _currency,
+        pharmacyName: _pharmacyName,
+        pharmacyAddress: _pharmacyAddress,
+        pharmacyPhone: _pharmacyPhone,
+        pharmacyEmail: _pharmacyEmail,
+        pharmacyOrderNumber: _pharmacyOrderNumber,
+      );
+      final file = File(receiptPath);
+      await file.writeAsBytes(bytes, flush: true);
+      debugPrint('Ticket PDF écrit dans $receiptPath');
+
+      try {
+        if (Platform.isMacOS) {
+          final openResult = await Process.run('open', [file.path]);
+          if (openResult.exitCode != 0) {
+            throw Exception(
+              openResult.stderr ?? 'open exited with ${openResult.exitCode}',
+            );
+          }
+        } else {
+          await OpenFilex.open(file.path);
+        }
+      } catch (openError, stack) {
+        debugPrint('Impossible d\'ouvrir le ticket: $openError\n$stack');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Ticket enregistré mais non ouvert automatiquement: $openError',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ticket sauvegardé: ${file.path}'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e, stack) {
+      debugPrint('Erreur lors de l\'enregistrement du ticket : $e\n$stack');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Impossible d\'enregistrer le ticket: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _onHistoryAction(SaleRecord sale, String action) async {
+    if (action == 'print') {
+      await _printSaleReceipt(sale);
+    } else if (action == 'save') {
+      await _savePdfAndOpen(sale);
+    } else if (action == 'cancel') {
+      await _promptCancelSale(sale);
+    }
   }
 }

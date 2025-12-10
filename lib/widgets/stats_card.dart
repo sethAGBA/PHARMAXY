@@ -65,13 +65,7 @@ class StatsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              color: subTextColor,
-            ),
-          ),
+          Text(title, style: TextStyle(fontSize: 16, color: subTextColor)),
           const SizedBox(height: 8),
           Text(
             subtitle,

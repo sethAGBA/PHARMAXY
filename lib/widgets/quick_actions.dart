@@ -42,7 +42,9 @@ class QuickActions extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 520;
-              final itemWidth = isWide ? (constraints.maxWidth - 20) / 2 : constraints.maxWidth;
+              final itemWidth = isWide
+                  ? (constraints.maxWidth - 20) / 2
+                  : constraints.maxWidth;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -54,6 +56,7 @@ class QuickActions extends StatelessWidget {
                           title: a.title,
                           icon: a.icon,
                           color: a.color,
+                          onPressed: a.onPressed,
                         ),
                       ),
                     )
@@ -68,16 +71,22 @@ class QuickActions extends StatelessWidget {
 }
 
 class _QuickActionButton extends StatelessWidget {
-  const _QuickActionButton({required this.title, required this.icon, required this.color});
+  const _QuickActionButton({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
 
   final String title;
   final IconData icon;
   final Color color;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {},
+        onTap: onPressed,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -114,8 +123,15 @@ class _QuickActionButton extends StatelessWidget {
 }
 
 class QuickActionItem {
-  const QuickActionItem({required this.title, required this.icon, required this.color});
+  const QuickActionItem({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
+
   final String title;
   final IconData icon;
   final Color color;
+  final VoidCallback onPressed;
 }

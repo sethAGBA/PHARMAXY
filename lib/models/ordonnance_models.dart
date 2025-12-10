@@ -5,7 +5,11 @@ class Patient {
   final String nir;
   final String mutuelle;
 
-  const Patient({required this.name, required this.nir, required this.mutuelle});
+  const Patient({
+    required this.name,
+    required this.nir,
+    required this.mutuelle,
+  });
 }
 
 class PrescribedDrug {
