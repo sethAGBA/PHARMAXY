@@ -54,8 +54,8 @@ class Sidebar extends StatelessWidget {
                   builder: (context, child) {
                     return Transform.rotate(
                       angle: animationController.value * 2 * pi,
-                // Subtle rotating badge that keeps the PHARMAXY brand mark visible.
-                child: Icon(
+                      // Subtle rotating badge that keeps the PHARMAXY brand mark visible.
+                      child: Icon(
                         Icons.medical_services_outlined,
                         size: 50,
                         color: palette.isDark ? Colors.white : Colors.black87,

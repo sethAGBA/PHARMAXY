@@ -7,10 +7,7 @@ import '../services/auth_service.dart';
 
 /// Écran de double authentification avec design moderne et animations
 class DoubleAuthenticationScreen extends StatefulWidget {
-  const DoubleAuthenticationScreen({
-    super.key,
-    required this.user,
-  });
+  const DoubleAuthenticationScreen({super.key, required this.user});
 
   final AppUser user;
 
@@ -19,8 +16,8 @@ class DoubleAuthenticationScreen extends StatefulWidget {
       _DoubleAuthenticationScreenState();
 }
 
-class _DoubleAuthenticationScreenState
-    extends State<DoubleAuthenticationScreen> with TickerProviderStateMixin {
+class _DoubleAuthenticationScreenState extends State<DoubleAuthenticationScreen>
+    with TickerProviderStateMixin {
   final TextEditingController _codeController = TextEditingController();
   bool _isProcessing = false;
   String? _error;
@@ -47,15 +44,13 @@ class _DoubleAuthenticationScreenState
       curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
     );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.2),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
-      ),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _scaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(
       CurvedAnimation(
@@ -70,10 +65,7 @@ class _DoubleAuthenticationScreenState
     )..repeat(reverse: true);
 
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     _shakeController = AnimationController(
@@ -115,8 +107,10 @@ class _DoubleAuthenticationScreenState
       _error = null;
     });
 
-    final verified =
-        AuthService.instance.verifyUserTwoFactor(widget.user, code);
+    final verified = AuthService.instance.verifyUserTwoFactor(
+      widget.user,
+      code,
+    );
     await Future.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
     setState(() => _isProcessing = false);
@@ -165,7 +159,7 @@ class _DoubleAuthenticationScreenState
               left: -120,
               child: _buildDecorativeCircle(280, gradientColors[2], 0.06),
             ),
-            
+
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
@@ -195,27 +189,19 @@ class _DoubleAuthenticationScreenState
       animation: _shakeController,
       builder: (context, child) {
         final offset = math.sin(_shakeController.value * math.pi * 4) * 8;
-        return Transform.translate(
-          offset: Offset(offset, 0),
-          child: child,
-        );
+        return Transform.translate(offset: Offset(offset, 0), child: child);
       },
       child: Card(
         elevation: 24,
         shadowColor: gradientColors[1].withOpacity(0.3),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(32),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(32),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                theme.cardColor,
-                theme.cardColor.withOpacity(0.95),
-              ],
+              colors: [theme.cardColor, theme.cardColor.withOpacity(0.95)],
             ),
             border: Border.all(
               color: gradientColors[1].withOpacity(0.2),
@@ -244,7 +230,7 @@ class _DoubleAuthenticationScreenState
                     ),
                   ),
                 ),
-                
+
                 Padding(
                   padding: const EdgeInsets.all(40),
                   child: Column(
@@ -325,25 +311,16 @@ class _DoubleAuthenticationScreenState
           decoration: BoxDecoration(
             color: gradientColors[1].withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: gradientColors[1].withOpacity(0.3),
-            ),
+            border: Border.all(color: gradientColors[1].withOpacity(0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.verified_user,
-                size: 16,
-                color: gradientColors[1],
-              ),
+              Icon(Icons.verified_user, size: 16, color: gradientColors[1]),
               const SizedBox(width: 6),
               const Text(
                 'Sécurité renforcée',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -360,9 +337,7 @@ class _DoubleAuthenticationScreenState
             ? Colors.white.withOpacity(0.05)
             : Colors.grey[100],
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.dividerColor.withOpacity(0.5),
-        ),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
       ),
       child: Row(
         children: [
@@ -372,11 +347,7 @@ class _DoubleAuthenticationScreenState
               color: Colors.blue.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.info_outline,
-              color: Colors.blue,
-              size: 24,
-            ),
+            child: const Icon(Icons.info_outline, color: Colors.blue, size: 24),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -418,9 +389,7 @@ class _DoubleAuthenticationScreenState
           fontWeight: FontWeight.w700,
           letterSpacing: 12,
         ),
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-        ],
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         decoration: InputDecoration(
           labelText: 'Code de sécurité',
           hintText: '• • • • • •',
@@ -443,17 +412,11 @@ class _DoubleAuthenticationScreenState
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(18),
-            borderSide: BorderSide(
-              color: gradientColors[1],
-              width: 2.5,
-            ),
+            borderSide: BorderSide(color: gradientColors[1], width: 2.5),
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(
-              color: Colors.red,
-              width: 2,
-            ),
+            borderSide: const BorderSide(color: Colors.red, width: 2),
           ),
           filled: true,
           fillColor: theme.brightness == Brightness.dark
@@ -476,10 +439,7 @@ class _DoubleAuthenticationScreenState
       builder: (context, value, child) {
         return Opacity(
           opacity: value,
-          child: Transform.scale(
-            scale: 0.9 + (value * 0.1),
-            child: child,
-          ),
+          child: Transform.scale(scale: 0.9 + (value * 0.1), child: child),
         );
       },
       child: Container(
@@ -487,10 +447,7 @@ class _DoubleAuthenticationScreenState
         decoration: BoxDecoration(
           color: Colors.red.withOpacity(0.12),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.red.withOpacity(0.4),
-            width: 2,
-          ),
+          border: Border.all(color: Colors.red.withOpacity(0.4), width: 2),
         ),
         child: Row(
           children: [
@@ -529,9 +486,7 @@ class _DoubleAuthenticationScreenState
       height: 58,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        gradient: LinearGradient(
-          colors: gradientColors,
-        ),
+        gradient: LinearGradient(colors: gradientColors),
         boxShadow: [
           BoxShadow(
             color: gradientColors[1].withOpacity(0.5),
@@ -585,16 +540,11 @@ class _DoubleAuthenticationScreenState
       icon: const Icon(Icons.arrow_back, size: 20),
       label: const Text(
         'Annuler et revenir',
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       ),
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
@@ -611,11 +561,7 @@ class _DoubleAuthenticationScreenState
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.help_outline,
-            size: 18,
-            color: theme.hintColor,
-          ),
+          Icon(Icons.help_outline, size: 18, color: theme.hintColor),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -640,12 +586,7 @@ class _DoubleAuthenticationScreenState
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: color.withOpacity(opacity),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 60,
-          ),
-        ],
+        boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 60)],
       ),
     );
   }

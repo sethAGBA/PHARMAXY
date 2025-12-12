@@ -108,6 +108,7 @@ class SalesService {
     await db.transaction((txn) async {
       final adjustedQuantities = <String, int>{};
       final productNames = <String, String>{};
+      final lotsAllocations = <String, Map<String, int>>{};
 
       for (final item in items) {
         final productId = item.productId;
@@ -119,22 +120,109 @@ class SalesService {
 
       final stockBefore = <String, int>{};
       for (final entry in adjustedQuantities.entries) {
-        final rows = await txn.query(
-          'stocks',
+        final productId = entry.key;
+        final qtyNeeded = entry.value;
+        final lotRows = await txn.query(
+          'lots',
           where: 'medicament_id = ?',
-          whereArgs: [entry.key],
-          limit: 1,
+          whereArgs: [productId],
+          orderBy:
+              "CASE WHEN peremption IS NULL OR peremption = '' THEN 1 ELSE 0 END, peremption ASC, id ASC",
         );
-        final available = rows.isNotEmpty
-            ? (rows.first['officine'] as int?) ?? 0
-            : 0;
-        if (available < entry.value) {
-          final label = productNames[entry.key] ?? entry.key;
-          throw StockException(
-            'Stock insuffisant pour $label (reste: $available)',
+        if (lotRows.isNotEmpty) {
+          final lots = lotRows
+              .map(
+                (r) => {
+                  'id': (r['id'] as num?)?.toInt() ?? 0,
+                  'lot': r['lot'] as String? ?? '',
+                  'peremption': r['peremption'] as String? ?? '',
+                  'quantite': (r['quantite'] as num?)?.toInt() ?? 0,
+                },
+              )
+              .toList();
+          final available = lots.fold<int>(
+            0,
+            (sum, l) => sum + (l['quantite'] as int),
           );
+          if (available < qtyNeeded) {
+            final label = productNames[productId] ?? productId;
+            throw StockException(
+              'Stock insuffisant pour $label (reste: $available)',
+            );
+          }
+          stockBefore[productId] = available;
+          var remainingToTake = qtyNeeded;
+          final allocations = <String, int>{};
+          for (final lot in lots) {
+            if (remainingToTake <= 0) break;
+            final lotQty = lot['quantite'] as int;
+            if (lotQty <= 0) continue;
+            final take = lotQty >= remainingToTake ? remainingToTake : lotQty;
+            remainingToTake -= take;
+            final lotNumber = (lot['lot'] as String).trim();
+            if (lotNumber.isNotEmpty) {
+              allocations[lotNumber] = (allocations[lotNumber] ?? 0) + take;
+            }
+            final newQty = lotQty - take;
+            await txn.update(
+              'lots',
+              {'quantite': newQty},
+              where: 'id = ?',
+              whereArgs: [lot['id']],
+            );
+          }
+          lotsAllocations[productId] = allocations;
+          final remainingTotal = available - qtyNeeded;
+          final earliestRemaining = await txn.query(
+            'lots',
+            where: 'medicament_id = ? AND quantite > 0',
+            whereArgs: [productId],
+            orderBy:
+                "CASE WHEN peremption IS NULL OR peremption = '' THEN 1 ELSE 0 END, peremption ASC, id ASC",
+            limit: 1,
+          );
+          await txn.update(
+            'stocks',
+            {
+              'officine': remainingTotal,
+              'lot': earliestRemaining.isNotEmpty
+                  ? (earliestRemaining.first['lot'] as String? ?? '')
+                  : '',
+              'peremption': earliestRemaining.isNotEmpty
+                  ? (earliestRemaining.first['peremption'] as String? ?? '')
+                  : '',
+            },
+            where: 'medicament_id = ?',
+            whereArgs: [productId],
+          );
+        } else {
+          final rows = await txn.query(
+            'stocks',
+            where: 'medicament_id = ?',
+            whereArgs: [productId],
+            limit: 1,
+          );
+          final available = rows.isNotEmpty
+              ? (rows.first['officine'] as int?) ?? 0
+              : 0;
+          if (available < qtyNeeded) {
+            final label = productNames[productId] ?? productId;
+            throw StockException(
+              'Stock insuffisant pour $label (reste: $available)',
+            );
+          }
+          stockBefore[productId] = available;
         }
-        stockBefore[entry.key] = available;
+      }
+
+      // Inject lot allocations into items for storage/receipt
+      for (var i = 0; i < items.length; i++) {
+        final pid = items[i].productId;
+        if (pid == null) continue;
+        final alloc = lotsAllocations[pid];
+        if (alloc != null && alloc.isNotEmpty) {
+          items[i] = items[i].copyWith(lots: alloc);
+        }
       }
 
       await txn.insert('ventes', {
@@ -153,12 +241,15 @@ class SalesService {
       for (final entry in adjustedQuantities.entries) {
         final previous = stockBefore[entry.key] ?? 0;
         final remaining = previous - entry.value;
-        await txn.update(
-          'stocks',
-          {'officine': remaining},
-          where: 'medicament_id = ?',
-          whereArgs: [entry.key],
-        );
+        // stocks already updated when lots exist; otherwise update here
+        if (!lotsAllocations.containsKey(entry.key)) {
+          await txn.update(
+            'stocks',
+            {'officine': remaining},
+            where: 'medicament_id = ?',
+            whereArgs: [entry.key],
+          );
+        }
         await ProductService.instance.recordStockMovement(
           executor: txn,
           medicamentId: entry.key,

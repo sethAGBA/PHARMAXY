@@ -123,7 +123,9 @@ class _MouvementsStocksScreenState extends State<MouvementsStocksScreen>
     final filteredMovements = _getFilteredMovements();
 
     if (_loading) {
-      return Center(child: CircularProgressIndicator(color: Theme.of(context).primaryColor));
+      return Center(
+        child: CircularProgressIndicator(color: Theme.of(context).primaryColor),
+      );
     }
 
     return FadeTransition(
@@ -243,9 +245,7 @@ class _MouvementsStocksScreenState extends State<MouvementsStocksScreen>
     final accent = Theme.of(context).primaryColor;
     return Card(
       color: palette.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -276,8 +276,9 @@ class _MouvementsStocksScreenState extends State<MouvementsStocksScreen>
                       )
                     : null,
                 filled: true,
-                fillColor:
-                    palette.isDark ? Colors.white.withOpacity(0.04) : Colors.grey[50],
+                fillColor: palette.isDark
+                    ? Colors.white.withOpacity(0.04)
+                    : Colors.grey[50],
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -322,7 +323,9 @@ class _MouvementsStocksScreenState extends State<MouvementsStocksScreen>
                 ),
                 _filterChip(
                   'Date début',
-                  _dateFrom == null ? 'Toutes' : '${_dateFrom!.day}/${_dateFrom!.month}',
+                  _dateFrom == null
+                      ? 'Toutes'
+                      : '${_dateFrom!.day}/${_dateFrom!.month}',
                   ['Toutes'],
                   (value) => _selectDateFrom(),
                   palette,
@@ -331,7 +334,9 @@ class _MouvementsStocksScreenState extends State<MouvementsStocksScreen>
                 ),
                 _filterChip(
                   'Date fin',
-                  _dateTo == null ? 'Toutes' : '${_dateTo!.day}/${_dateTo!.month}',
+                  _dateTo == null
+                      ? 'Toutes'
+                      : '${_dateTo!.day}/${_dateTo!.month}',
                   ['Toutes'],
                   (value) => _selectDateTo(),
                   palette,
@@ -347,8 +352,9 @@ class _MouvementsStocksScreenState extends State<MouvementsStocksScreen>
                     onPressed: _resetFilters,
                     label: const Text('Réinitialiser'),
                     avatar: const Icon(Icons.clear, size: 18),
-                    backgroundColor:
-                        palette.isDark ? Colors.white.withOpacity(0.1) : Colors.grey[200],
+                    backgroundColor: palette.isDark
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.grey[200],
                   ),
               ],
             ),
@@ -357,6 +363,7 @@ class _MouvementsStocksScreenState extends State<MouvementsStocksScreen>
       ),
     );
   }
+
   Widget _filterChip(
     String label,
     String value,

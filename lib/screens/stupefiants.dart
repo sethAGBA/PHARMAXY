@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../app_theme.dart';
+import '../models/stupefiant_mouvement.dart';
+import '../services/local_database_service.dart';
 
 class StupefiantsScreen extends StatefulWidget {
   const StupefiantsScreen({super.key});
@@ -19,69 +21,13 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
   String _type = 'Tous';
   String _periode = 'Ce mois';
 
-  final List<_Mouvement> _mouvements = const [
-    _Mouvement(
-      ref: 'STU-2024-1201',
-      date: '08/12/2024',
-      produit: 'Morphine 10mg/1ml',
-      lot: 'MORP-24A',
-      type: 'Entrée',
-      quantite: 120,
-      agent: 'Dupont A.',
-      motif: 'Livraison grossiste',
-    ),
-    _Mouvement(
-      ref: 'STU-2024-1198',
-      date: '07/12/2024',
-      produit: 'Fentanyl 50mcg patch',
-      lot: 'FENT-24B',
-      type: 'Sortie',
-      quantite: 4,
-      agent: 'Martin L.',
-      motif: 'Dispensation ordonnance',
-    ),
-    _Mouvement(
-      ref: 'STU-2024-1195',
-      date: '06/12/2024',
-      produit: 'Morphine 10mg/1ml',
-      lot: 'MORP-24A',
-      type: 'Sortie',
-      quantite: 6,
-      agent: 'Bernard S.',
-      motif: 'Dispensation ordonnance',
-    ),
-    _Mouvement(
-      ref: 'STU-2024-1188',
-      date: '04/12/2024',
-      produit: 'Méthadone 40mg',
-      lot: 'METH-24C',
-      type: 'Entrée',
-      quantite: 80,
-      agent: 'Petit N.',
-      motif: 'Réception fournisseur',
-    ),
-  ];
+  List<StupefiantMouvement> _mouvements = [];
+  bool _loading = true;
+  String? _error;
+  List<String> _produitSuggestions = [];
+  final Map<String, List<String>> _lotsParProduit = {};
 
-  final List<_Controle> _controles = const [
-    _Controle(
-      date: '30/11/2024',
-      ecart: '+2 ampoules',
-      statut: 'A justifier',
-      agent: 'Dubois V.',
-    ),
-    _Controle(
-      date: '31/10/2024',
-      ecart: '0',
-      statut: 'Conforme',
-      agent: 'Martin L.',
-    ),
-    _Controle(
-      date: '30/09/2024',
-      ecart: '-1 patch',
-      statut: 'Signalé',
-      agent: 'Dupont A.',
-    ),
-  ];
+  final List<_Controle> _controles = [];
 
   @override
   void initState() {
@@ -94,6 +40,7 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
       CurvedAnimation(parent: _controller!, curve: Curves.easeOutCubic),
     );
     _controller!.forward();
+    _loadMouvements();
   }
 
   @override
@@ -103,7 +50,75 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
     super.dispose();
   }
 
-  List<_Mouvement> get _filtered {
+  Future<void> _loadMouvements() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await LocalDatabaseService.instance.init();
+      final movs = await LocalDatabaseService.instance
+          .getStupefiantMouvements();
+      final db = LocalDatabaseService.instance.db;
+      final produitsRows = await db.query(
+        'medicaments',
+        columns: ['nom'],
+        where: 'stupefiant = 1',
+        orderBy: 'nom ASC',
+      );
+      final produitSuggestions = produitsRows
+          .map((r) => (r['nom'] as String?) ?? '')
+          .where((n) => n.isNotEmpty)
+          .toList();
+
+      final lotsRows = await db.rawQuery('''
+        SELECT m.nom as produit, l.lot as lot
+        FROM lots l
+        JOIN medicaments m ON m.id = l.medicament_id
+        WHERE m.stupefiant = 1
+      ''');
+      final lotsParProduit = <String, Set<String>>{};
+      for (final r in lotsRows) {
+        final produit = (r['produit'] as String?) ?? '';
+        final lot = (r['lot'] as String?) ?? '';
+        if (produit.isEmpty || lot.isEmpty) continue;
+        lotsParProduit.putIfAbsent(produit, () => <String>{}).add(lot);
+      }
+      if (!mounted) return;
+      setState(() {
+        _mouvements = movs;
+        _produitSuggestions = produitSuggestions;
+        _lotsParProduit
+          ..clear()
+          ..addAll(
+            lotsParProduit.map((k, v) => MapEntry(k, v.toList()..sort())),
+          );
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  bool _inSelectedPeriod(DateTime date) {
+    final now = DateTime.now();
+    if (_periode == 'Ce mois') {
+      return date.year == now.year && date.month == now.month;
+    }
+    if (_periode == '30 jours') {
+      return date.isAfter(now.subtract(const Duration(days: 30)));
+    }
+    if (_periode == '90 jours') {
+      return date.isAfter(now.subtract(const Duration(days: 90)));
+    }
+    return true;
+  }
+
+  List<StupefiantMouvement> get _filtered {
     final q = _searchController.text.toLowerCase();
     return _mouvements.where((m) {
       final matchesText =
@@ -111,7 +126,8 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
           m.ref.toLowerCase().contains(q) ||
           m.lot.toLowerCase().contains(q);
       final matchesType = _type == 'Tous' || m.type == _type;
-      return matchesText && matchesType;
+      final matchesPeriode = _inSelectedPeriod(m.date);
+      return matchesText && matchesType && matchesPeriode;
     }).toList();
   }
 
@@ -119,6 +135,15 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
   Widget build(BuildContext context) {
     final palette = ThemeColors.from(context);
     const accent = Colors.deepPurple;
+
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: Text('Erreur: $_error', style: TextStyle(color: palette.text)),
+      );
+    }
 
     return FadeTransition(
       opacity: _fade,
@@ -199,12 +224,35 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
   }
 
   Widget _buildKpis(ThemeColors palette, Color accent) {
+    final totalEntrees = _mouvements
+        .where((m) => m.type == 'Entrée')
+        .fold<int>(0, (sum, m) => sum + m.quantite);
+    final totalSorties = _mouvements
+        .where((m) => m.type == 'Sortie')
+        .fold<int>(0, (sum, m) => sum + m.quantite);
+    final stockTheorique = totalEntrees - totalSorties;
+
+    final entreesPeriode = _mouvements
+        .where((m) => m.type == 'Entrée' && _inSelectedPeriod(m.date))
+        .fold<int>(0, (sum, m) => sum + m.quantite);
+    final sortiesPeriode = _mouvements
+        .where((m) => m.type == 'Sortie' && _inSelectedPeriod(m.date))
+        .fold<int>(0, (sum, m) => sum + m.quantite);
+
+    final stockParLot = <String, int>{};
+    for (final m in _mouvements) {
+      final key = '${m.produit}::${m.lot}';
+      final delta = m.type == 'Entrée' ? m.quantite : -m.quantite;
+      stockParLot[key] = (stockParLot[key] ?? 0) + delta;
+    }
+    final alertes = stockParLot.values.where((v) => v < 0).length;
+
     return Row(
       children: [
         Expanded(
           child: _kpi(
             'Stock théorique',
-            '318 unités',
+            '$stockTheorique unités',
             Icons.inventory_2,
             accent,
             palette,
@@ -214,7 +262,7 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
         Expanded(
           child: _kpi(
             'Entrées (mois)',
-            '200',
+            '$entreesPeriode',
             Icons.download,
             Colors.green,
             palette,
@@ -224,7 +272,7 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
         Expanded(
           child: _kpi(
             'Sorties (mois)',
-            '95',
+            '$sortiesPeriode',
             Icons.upload,
             Colors.orange,
             palette,
@@ -234,7 +282,7 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
         Expanded(
           child: _kpi(
             'Alertes / écarts',
-            '2',
+            '$alertes',
             Icons.warning_amber,
             Colors.redAccent,
             palette,
@@ -351,7 +399,7 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
                   width: fieldWidth,
                   child: DropdownButtonFormField<String>(
                     value: _periode,
-                    items: const ['Ce mois', '30 derniers jours', '90 jours']
+                    items: const ['Ce mois', '30 jours', '90 jours']
                         .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                         .toList(),
                     onChanged: (v) => setState(() => _periode = v ?? 'Ce mois'),
@@ -369,7 +417,10 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: accent.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(10),
@@ -419,7 +470,7 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
                 ),
                 const Spacer(),
                 ElevatedButton.icon(
-                  onPressed: () {},
+                  onPressed: () => _ouvrirDialogMouvement(),
                   icon: const Icon(Icons.add),
                   label: const Text('Nouvelle écriture'),
                   style: ElevatedButton.styleFrom(
@@ -449,6 +500,7 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
                   _col('Quantité', palette),
                   _col('Agent', palette),
                   _col('Motif', palette),
+                  _col('Actions', palette),
                 ],
                 rows: _filtered.map((m) => _row(m, palette)).toList(),
               ),
@@ -468,12 +520,17 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
     );
   }
 
-  DataRow _row(_Mouvement m, ThemeColors palette) {
+  DataRow _row(StupefiantMouvement m, ThemeColors palette) {
     final color = m.type == 'Entrée' ? Colors.green : Colors.orange;
     return DataRow(
       cells: [
         DataCell(Text(m.ref, style: TextStyle(color: palette.text))),
-        DataCell(Text(m.date, style: TextStyle(color: palette.text))),
+        DataCell(
+          Text(
+            '${m.date.day.toString().padLeft(2, '0')}/${m.date.month.toString().padLeft(2, '0')}/${m.date.year}',
+            style: TextStyle(color: palette.text),
+          ),
+        ),
         DataCell(Text(m.produit, style: TextStyle(color: palette.text))),
         DataCell(Text(m.lot, style: TextStyle(color: palette.text))),
         DataCell(
@@ -497,8 +554,263 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
         ),
         DataCell(Text(m.agent, style: TextStyle(color: palette.text))),
         DataCell(Text(m.motif, style: TextStyle(color: palette.subText))),
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () => _ouvrirDialogMouvement(existing: m),
+                icon: const Icon(Icons.edit, size: 18),
+              ),
+              IconButton(
+                onPressed: () => _confirmerSuppression(m),
+                icon: const Icon(Icons.delete, size: 18),
+              ),
+            ],
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _ouvrirDialogMouvement({StupefiantMouvement? existing}) async {
+    final formKey = GlobalKey<FormState>();
+    final produitCtrl = TextEditingController(text: existing?.produit ?? '');
+    final lotCtrl = TextEditingController(text: existing?.lot ?? '');
+    final quantiteCtrl = TextEditingController(
+      text: existing != null ? existing.quantite.toString() : '',
+    );
+    final agentCtrl = TextEditingController(text: existing?.agent ?? '');
+    final motifCtrl = TextEditingController(text: existing?.motif ?? '');
+    DateTime date = existing?.date ?? DateTime.now();
+    String type = existing?.type ?? 'Entrée';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setLocal) {
+            return AlertDialog(
+              title: Text(
+                existing == null
+                    ? 'Nouvelle écriture stupéfiants'
+                    : 'Modifier écriture',
+              ),
+              content: Form(
+                key: formKey,
+                child: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Autocomplete<String>(
+                        initialValue: TextEditingValue(text: produitCtrl.text),
+                        optionsBuilder: (textEditingValue) {
+                          final q = textEditingValue.text.toLowerCase();
+                          if (q.isEmpty) return _produitSuggestions;
+                          return _produitSuggestions
+                              .where((p) => p.toLowerCase().contains(q))
+                              .toList();
+                        },
+                        onSelected: (selection) {
+                          setLocal(() {
+                            produitCtrl.text = selection;
+                            lotCtrl.text = '';
+                          });
+                        },
+                        fieldViewBuilder:
+                            (context, controller, focusNode, onSubmit) {
+                              controller.text = produitCtrl.text;
+                              controller.selection = TextSelection.collapsed(
+                                offset: controller.text.length,
+                              );
+                              return TextFormField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                decoration: const InputDecoration(
+                                  labelText: 'Produit',
+                                ),
+                                onChanged: (v) => setLocal(() {
+                                  produitCtrl.text = v;
+                                  lotCtrl.text = '';
+                                }),
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                    ? 'Requis'
+                                    : null,
+                              );
+                            },
+                      ),
+                      const SizedBox(height: 12),
+                      Autocomplete<String>(
+                        initialValue: TextEditingValue(text: lotCtrl.text),
+                        optionsBuilder: (textEditingValue) {
+                          final produit = produitCtrl.text.trim();
+                          final lots = _lotsParProduit[produit] ?? const [];
+                          final q = textEditingValue.text.toLowerCase();
+                          if (q.isEmpty) return lots;
+                          return lots
+                              .where((l) => l.toLowerCase().contains(q))
+                              .toList();
+                        },
+                        onSelected: (selection) {
+                          setLocal(() {
+                            lotCtrl.text = selection;
+                          });
+                        },
+                        fieldViewBuilder:
+                            (context, controller, focusNode, onSubmit) {
+                              controller.text = lotCtrl.text;
+                              controller.selection = TextSelection.collapsed(
+                                offset: controller.text.length,
+                              );
+                              return TextFormField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                decoration: const InputDecoration(
+                                  labelText: 'Lot',
+                                ),
+                                onChanged: (v) => setLocal(() {
+                                  lotCtrl.text = v;
+                                }),
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                    ? 'Requis'
+                                    : null,
+                              );
+                            },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: type,
+                        decoration: const InputDecoration(labelText: 'Type'),
+                        items: const ['Entrée', 'Sortie']
+                            .map(
+                              (t) => DropdownMenuItem(value: t, child: Text(t)),
+                            )
+                            .toList(),
+                        onChanged: (v) => setLocal(() {
+                          type = v ?? type;
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: quantiteCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Quantité',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (v) =>
+                            int.tryParse(v ?? '') == null ? 'Nombre' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: agentCtrl,
+                        decoration: const InputDecoration(labelText: 'Agent'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: motifCtrl,
+                        decoration: const InputDecoration(labelText: 'Motif'),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Text('Date'),
+                          const SizedBox(width: 12),
+                          TextButton(
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: date,
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime.now(),
+                              );
+                              if (picked != null) {
+                                setLocal(() => date = picked);
+                              }
+                            },
+                            child: Text(
+                              '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (formKey.currentState?.validate() != true) return;
+                    Navigator.pop(context, true);
+                  },
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (confirm != true) return;
+
+    final mouvement =
+        (existing ??
+                StupefiantMouvement(
+                  id: 0,
+                  produit: '',
+                  lot: '',
+                  type: 'Entrée',
+                  quantite: 0,
+                  date: date,
+                  agent: '',
+                  motif: '',
+                ))
+            .copyWith(
+              produit: produitCtrl.text.trim(),
+              lot: lotCtrl.text.trim(),
+              type: type,
+              quantite: int.tryParse(quantiteCtrl.text.trim()) ?? 0,
+              agent: agentCtrl.text.trim(),
+              motif: motifCtrl.text.trim(),
+              date: date,
+            );
+
+    if (existing == null) {
+      await LocalDatabaseService.instance.insertStupefiantMouvement(mouvement);
+    } else {
+      await LocalDatabaseService.instance.updateStupefiantMouvement(mouvement);
+    }
+    await _loadMouvements();
+  }
+
+  Future<void> _confirmerSuppression(StupefiantMouvement m) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer écriture'),
+        content: Text('Supprimer ${m.ref} ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await LocalDatabaseService.instance.deleteStupefiantMouvement(m.id);
+    await _loadMouvements();
   }
 
   Widget _buildAuditAndDeclarations(ThemeColors palette, Color accent) {
@@ -535,7 +847,16 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
               ],
             ),
             const SizedBox(height: 12),
-            ..._controles.map((c) => _controleTile(c, palette)),
+            if (_controles.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'Aucun contrôle enregistré',
+                  style: TextStyle(color: palette.subText),
+                ),
+              )
+            else
+              ..._controles.map((c) => _controleTile(c, palette)),
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
@@ -591,24 +912,6 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
   }
 
   Widget _buildDeclarationCard(ThemeColors palette, Color accent) {
-    final upcoming = [
-      {
-        'label': 'Déclaration trimestrielle ARS',
-        'date': '15/01/2025',
-        'statut': 'A préparer',
-      },
-      {
-        'label': 'Registre PDF à signer',
-        'date': '31/12/2024',
-        'statut': 'En attente',
-      },
-      {
-        'label': 'Export comptable stupéfiants',
-        'date': 'Hebdo',
-        'statut': 'Automatisé',
-      },
-    ];
-
     return _card(
       palette,
       child: Padding(
@@ -631,43 +934,12 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
               ],
             ),
             const SizedBox(height: 12),
-            Column(
-              children: upcoming
-                  .map(
-                    (d) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: accent.withOpacity(0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.upload_file,
-                          color: Colors.deepPurple,
-                        ),
-                      ),
-                      title: Text(
-                        d['label']!,
-                        style: TextStyle(
-                          color: palette.text,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: Text(
-                        'Échéance: ${d['date']}',
-                        style: TextStyle(color: palette.subText),
-                      ),
-                      trailing: Text(
-                        d['statut']!,
-                        style: TextStyle(
-                          color: accent,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Aucune déclaration programmée',
+                style: TextStyle(color: palette.subText),
+              ),
             ),
             const SizedBox(height: 8),
             Align(
@@ -714,28 +986,6 @@ class _StupefiantsScreenState extends State<StupefiantsScreen>
       child: child,
     );
   }
-}
-
-class _Mouvement {
-  final String ref;
-  final String date;
-  final String produit;
-  final String lot;
-  final String type;
-  final int quantite;
-  final String agent;
-  final String motif;
-
-  const _Mouvement({
-    required this.ref,
-    required this.date,
-    required this.produit,
-    required this.lot,
-    required this.type,
-    required this.quantite,
-    required this.agent,
-    required this.motif,
-  });
 }
 
 class _Controle {

@@ -3,16 +3,20 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:printing/printing.dart';
 
 import '../app_theme.dart';
 import '../models/caisse_settings.dart';
+import '../models/lot_entry.dart';
+import '../models/patient_model.dart';
 import '../models/sale_models.dart';
 import '../services/local_database_service.dart';
 import '../services/product_service.dart';
 import '../services/sales_service.dart';
 import '../services/ticket_service.dart';
+import '../widgets/patient_autocomplete_field.dart';
 
 class VenteCaisseScreen extends StatefulWidget {
   const VenteCaisseScreen({super.key});
@@ -29,12 +33,19 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
       TextEditingController();
   final List<CartItem> _cartItems = [];
   List<Product> _availableProducts = [];
+  List<PatientModel> _patients = [];
+  String? _selectedClientId;
+  String _clientSearchTerm = '';
   double _remisePercentage = 0;
+  double _remiseAmount = 0;
+  _RemiseMode _remiseMode = _RemiseMode.pourcentage;
+  final TextEditingController _remiseController = TextEditingController();
   String _selectedPaymentMethod = 'Espèces';
   late AnimationController _animationController;
   List<SaleRecord> _salesHistory = [];
   bool _loading = true;
   final TextEditingController _clientInfoController = TextEditingController();
+  final FocusNode _clientInfoFocus = FocusNode();
   bool _printCustomerReceipt = true;
   String _clientFieldLabel = 'Client';
   String _currency = 'FCFA';
@@ -44,6 +55,27 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
   String _pharmacyPhone = '';
   String _pharmacyEmail = '';
   String _pharmacyOrderNumber = '';
+  String _pharmacyWebsite = '';
+  String _pharmacyHours = '';
+  String _emergencyContact = '';
+  String _fiscalId = '';
+  String _taxDetails = '';
+  String _returnPolicy = '';
+  String _healthAdvice = '';
+  String _loyaltyMessage = '';
+  String _ticketLink = '';
+  String _ticketFooter = 'Merci de votre confiance. Prompt rétablissement !';
+
+  String _formatLotExpiry(String isoOrLegacy) {
+    final raw = isoOrLegacy.trim();
+    if (raw.isEmpty) return '-';
+    try {
+      return DateFormat('MM/yyyy').format(DateTime.parse(raw));
+    } catch (_) {
+      // Legacy formats like "08/2026" or already formatted strings
+      return raw;
+    }
+  }
 
   @override
   void initState() {
@@ -57,13 +89,16 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
   }
 
   Future<void> _loadData() async {
+    await LocalDatabaseService.instance.init();
     final products = await ProductService.instance.fetchProductsForSale();
     final history = await SalesService.instance.fetchSalesHistory(limit: 30);
     final CaisseSettings caisse = await LocalDatabaseService.instance
         .getCaisseSettings();
+    final patients = await LocalDatabaseService.instance.getPatientsLite();
     setState(() {
       _availableProducts = products;
       _salesHistory = history;
+      _patients = patients;
       _loading = false;
       _printCustomerReceipt = caisse.printCustomerReceipt;
       _clientFieldLabel = caisse.customerField;
@@ -81,6 +116,16 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
       _pharmacyPhone = settings.pharmacyPhone;
       _pharmacyEmail = settings.pharmacyEmail;
       _pharmacyOrderNumber = settings.pharmacyOrderNumber;
+      _pharmacyWebsite = settings.pharmacyWebsite;
+      _pharmacyHours = settings.pharmacyHours;
+      _emergencyContact = settings.emergencyContact;
+      _fiscalId = settings.fiscalId;
+      _taxDetails = settings.taxDetails;
+      _returnPolicy = settings.returnPolicy;
+      _healthAdvice = settings.healthAdvice;
+      _loyaltyMessage = settings.loyaltyMessage;
+      _ticketLink = settings.ticketLink;
+      _ticketFooter = settings.ticketFooter;
     });
   }
 
@@ -91,12 +136,22 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     _historySearchController.dispose();
     _animationController.dispose();
     _clientInfoController.dispose();
+    _clientInfoFocus.dispose();
+    _remiseController.dispose();
     super.dispose();
   }
 
   double get _sousTotal =>
       _cartItems.fold(0, (sum, item) => sum + (item.price * item.quantity));
-  double get _montantRemise => _sousTotal * (_remisePercentage / 100);
+  double get _montantRemise {
+    if (_remiseMode == _RemiseMode.pourcentage) {
+      final pct = _remisePercentage.clamp(0, 100);
+      return _sousTotal * (pct / 100);
+    }
+    final amt = _remiseAmount.clamp(0, _sousTotal);
+    return amt.toDouble();
+  }
+
   double get _total => _sousTotal - _montantRemise;
 
   List<Product> get _filteredProducts {
@@ -119,7 +174,326 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     }).toList();
   }
 
-  void _addToCart(Product product) {
+  int _reservedQtyForLot(String productId, String lot, {int? excludeIndex}) {
+    var reserved = 0;
+    for (var i = 0; i < _cartItems.length; i++) {
+      if (excludeIndex != null && i == excludeIndex) continue;
+      final item = _cartItems[i];
+      if (item.productId != productId) continue;
+      final lots = item.lots;
+      if (lots == null) continue;
+      reserved += lots[lot] ?? 0;
+    }
+    return reserved;
+  }
+
+  Future<Map<String, int>?> _pickLotForProduct(
+    Product product, {
+    int initialQty = 1,
+  }) async {
+    final palette = ThemeColors.from(context);
+    List<LotEntry> lots = [];
+    try {
+      lots = await ProductService.instance.fetchLotsForProduct(product.id);
+    } catch (_) {}
+    if (lots.isEmpty) return null;
+
+    LotEntry? selected = lots.first;
+    final qtyCtrl = TextEditingController(text: initialQty.toString());
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final availableForSelected = selected == null
+                ? 0
+                : selected!.quantite -
+                      _reservedQtyForLot(product.id, selected!.lot);
+            return AlertDialog(
+              backgroundColor: palette.card,
+              title: Text(
+                'Choisir le lot',
+                style: TextStyle(color: palette.text),
+              ),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<LotEntry>(
+                      value: selected,
+                      isExpanded: true,
+                      items: lots
+                          .map(
+                            (l) => DropdownMenuItem(
+                              value: l,
+                              child: Text(
+                                '${l.lot} • ${l.quantite} • ${_formatLotExpiry(l.peremptionIso)}',
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setModalState(() => selected = v ?? selected),
+                      decoration: const InputDecoration(
+                        labelText: 'Lot disponible',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: qtyCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Quantité',
+                        helperText: 'Disponible: $availableForSelected',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context, true),
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Ajouter'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (ok != true || selected == null) return null;
+    final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+    final availableForSelected =
+        selected!.quantite - _reservedQtyForLot(product.id, selected!.lot);
+    if (qty <= 0 || qty > availableForSelected) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Quantité invalide pour le lot ${selected!.lot} (disponible: $availableForSelected)',
+            ),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+      return null;
+    }
+    return {selected!.lot: qty};
+  }
+
+  Future<void> _editLotsForCartItem(int index) async {
+    final item = _cartItems[index];
+    final product = _findProduct(item.productId);
+    if (product == null) return;
+    List<LotEntry> lots = [];
+    try {
+      lots = await ProductService.instance.fetchLotsForProduct(product.id);
+    } catch (_) {}
+    if (lots.isEmpty) return;
+
+    final palette = ThemeColors.from(context);
+    final allocations = <String, int>{...?item.lots};
+    // Ensure every lot has an entry (0 by default)
+    for (final l in lots) {
+      allocations.putIfAbsent(l.lot, () => 0);
+    }
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            int totalAllocated = allocations.values.fold(0, (s, v) => s + v);
+            final remaining = item.quantity - totalAllocated;
+
+            int availableForLot(LotEntry l) {
+              final reservedOther = _reservedQtyForLot(
+                product.id,
+                l.lot,
+                excludeIndex: index,
+              );
+              final currentAlloc = allocations[l.lot] ?? 0;
+              return (l.quantite - reservedOther) + currentAlloc;
+            }
+
+            return AlertDialog(
+              backgroundColor: palette.card,
+              title: Text(
+                'Modifier les lots',
+                style: TextStyle(color: palette.text),
+              ),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${item.name} • Quantité totale: ${item.quantity}',
+                      style: TextStyle(color: palette.subText),
+                    ),
+                    const SizedBox(height: 8),
+                    if (remaining != 0)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          remaining > 0
+                              ? 'Reste à affecter: $remaining'
+                              : 'Sur-affecté: ${-remaining}',
+                          style: TextStyle(
+                            color: remaining == 0
+                                ? palette.subText
+                                : Colors.red,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: lots.length,
+                        separatorBuilder: (_, __) =>
+                            Divider(color: palette.divider),
+                        itemBuilder: (context, i) {
+                          final l = lots[i];
+                          final alloc = allocations[l.lot] ?? 0;
+                          final available = availableForLot(l);
+                          final peremp = _formatLotExpiry(l.peremptionIso);
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      l.lot,
+                                      style: TextStyle(
+                                        color: palette.text,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Péremption: $peremp • Dispo: $available',
+                                      style: TextStyle(
+                                        color: palette.subText,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: alloc > 0
+                                    ? () => setModalState(() {
+                                        allocations[l.lot] = alloc - 1;
+                                      })
+                                    : null,
+                                icon: const Icon(
+                                  Icons.remove_circle_outline,
+                                  size: 20,
+                                  color: Color(0xFFEF4444),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 46,
+                                child: Text(
+                                  '$alloc',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: palette.text,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed:
+                                    alloc < available &&
+                                        totalAllocated < item.quantity
+                                    ? () => setModalState(() {
+                                        allocations[l.lot] = alloc + 1;
+                                      })
+                                    : null,
+                                icon: const Icon(
+                                  Icons.add_circle_outline,
+                                  size: 20,
+                                  color: Color(0xFF10B981),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: remaining == 0
+                      ? () => Navigator.pop(context, true)
+                      : null,
+                  icon: const Icon(Icons.save, size: 18),
+                  label: const Text('Enregistrer'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (ok != true) return;
+    allocations.removeWhere((k, v) => v <= 0);
+    setState(() {
+      _cartItems[index] = item.copyWith(
+        lots: allocations.isEmpty ? null : allocations,
+      );
+    });
+  }
+
+  void _removeOneFromCart(int index) {
+    final item = _cartItems[index];
+    if (item.quantity <= 0) return;
+    if (item.lots != null && item.lots!.isNotEmpty) {
+      final lots = Map<String, int>.from(item.lots!);
+      // Remove from any lot with qty > 0 (prefer the largest)
+      final ordered = lots.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      for (final e in ordered) {
+        if (e.value <= 0) continue;
+        lots[e.key] = e.value - 1;
+        if (lots[e.key] == 0) lots.remove(e.key);
+        break;
+      }
+      setState(() {
+        _cartItems[index] = item.copyWith(
+          quantity: item.quantity - 1,
+          lots: lots.isEmpty ? null : lots,
+        );
+        if (_cartItems[index].quantity <= 0) {
+          _cartItems.removeAt(index);
+        }
+      });
+      return;
+    }
+    _updateQuantity(index, item.quantity - 1);
+  }
+
+  Future<bool> _addToCart(Product product) async {
     if (product.availableStock <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -127,15 +501,131 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
-      return;
+      return false;
     }
+
     final existingIndex = _cartItems.indexWhere(
       (item) => item.productId == product.id,
     );
     final currentQty = existingIndex != -1
         ? _cartItems[existingIndex].quantity
         : 0;
-    if (currentQty >= product.availableStock) {
+
+    // If already in cart and has lots allocations, auto-add 1 to same/preferred lot
+    if (existingIndex != -1) {
+      final existing = _cartItems[existingIndex];
+      if (existing.lots != null && existing.lots!.isNotEmpty) {
+        List<LotEntry> lots = [];
+        try {
+          lots = await ProductService.instance.fetchLotsForProduct(product.id);
+        } catch (_) {}
+        if (lots.isNotEmpty) {
+          final allocations = Map<String, int>.from(existing.lots!);
+          // Prefer lot with highest allocated qty, else earliest available.
+          String? preferredLot = allocations.entries.isNotEmpty
+              ? (allocations.entries.toList()
+                      ..sort((a, b) => b.value.compareTo(a.value)))
+                    .first
+                    .key
+              : null;
+          // Find a lot with availability.
+          LotEntry? target;
+          if (preferredLot != null) {
+            target = lots.firstWhere(
+              (l) => l.lot == preferredLot,
+              orElse: () => lots.first,
+            );
+            final available =
+                target.quantite -
+                _reservedQtyForLot(
+                  product.id,
+                  target.lot,
+                  excludeIndex: existingIndex,
+                );
+            if (available <= 0) {
+              target = null;
+            }
+          }
+          if (target == null) {
+            for (final l in lots) {
+              final available =
+                  l.quantite -
+                  _reservedQtyForLot(
+                    product.id,
+                    l.lot,
+                    excludeIndex: existingIndex,
+                  );
+              if (available > 0) {
+                target = l;
+                break;
+              }
+            }
+          }
+          if (target == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Stock limité pour ${product.name}'),
+                backgroundColor: const Color(0xFFEF4444),
+              ),
+            );
+            return false;
+          }
+          if (currentQty + 1 > product.availableStock) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Stock limité à ${product.availableStock} pour ce produit',
+                ),
+                backgroundColor: const Color(0xFFEF4444),
+              ),
+            );
+            return false;
+          }
+          allocations[target.lot] = (allocations[target.lot] ?? 0) + 1;
+          setState(() {
+            _cartItems[existingIndex] = existing.copyWith(
+              quantity: existing.quantity + 1,
+              lots: allocations,
+            );
+          });
+          _animationController.forward(from: 0);
+          return true;
+        }
+      }
+
+      // No lots allocations yet, or no lots in DB: just increment quantity.
+      if (currentQty + 1 > product.availableStock) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Stock limité à ${product.availableStock} pour ce produit',
+            ),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+        return false;
+      }
+      setState(() {
+        _cartItems[existingIndex].quantity++;
+      });
+      _animationController.forward(from: 0);
+      return true;
+    }
+
+    // Not yet in cart: if product has lots, ask once.
+    Map<String, int>? pickedLots;
+    try {
+      final lots = await ProductService.instance.fetchLotsForProduct(
+        product.id,
+      );
+      if (lots.isNotEmpty) {
+        pickedLots = await _pickLotForProduct(product);
+        if (pickedLots == null) return false;
+      }
+    } catch (_) {}
+
+    final addingQty = pickedLots?.values.fold<int>(0, (s, v) => s + v) ?? 1;
+    if (currentQty + addingQty > product.availableStock) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -144,25 +634,26 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
-      return;
+      return false;
     }
     setState(() {
-      if (existingIndex != -1) {
-        _cartItems[existingIndex].quantity++;
-      } else {
-        _cartItems.add(
-          CartItem(
-            productId: product.id,
-            name: product.name,
-            barcode: product.barcode,
-            price: product.price,
-            quantity: 1,
-            category: product.category,
-          ),
-        );
-      }
+      _cartItems.add(
+        CartItem(
+          productId: product.id,
+          name: product.name,
+          barcode: product.barcode,
+          price: product.price,
+          quantity: addingQty,
+          category: product.category,
+          ordonnance: product.ordonnance,
+          controle: product.controle,
+          stupefiant: product.stupefiant,
+          lots: pickedLots,
+        ),
+      );
     });
     _animationController.forward(from: 0);
+    return true;
   }
 
   void _removeFromCart(int index) {
@@ -190,7 +681,7 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     });
   }
 
-  void _scanBarcode() {
+  Future<void> _scanBarcode() async {
     final barcode = _barcodeController.text.trim();
     if (barcode.isEmpty) return;
     final product = _availableProducts.firstWhere(
@@ -205,15 +696,17 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
       ),
     );
     if (product.price > 0) {
-      _addToCart(product);
+      final added = await _addToCart(product);
       _barcodeController.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${product.name} ajouté au panier'),
-          backgroundColor: const Color(0xFF10B981),
-          duration: const Duration(seconds: 1),
-        ),
-      );
+      if (added) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${product.name} ajouté au panier'),
+            backgroundColor: const Color(0xFF10B981),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -229,6 +722,8 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     setState(() {
       _cartItems.clear();
       _remisePercentage = 0;
+      _remiseAmount = 0;
+      _remiseController.clear();
     });
   }
 
@@ -237,13 +732,17 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     final clientInfo = _clientInfoController.text.trim();
     final receiptTotal = _total;
     final cartSnapshot = List<CartItem>.from(_cartItems);
+    String? clientId = _selectedClientId;
+    if (clientInfo.isNotEmpty && clientId == null) {
+      clientId = await _ensureClientExists(clientInfo);
+    }
     try {
       await SalesService.instance.recordSale(
         id: saleId,
         total: _total,
         paymentMethod: _selectedPaymentMethod,
         type: 'Vente comptoir',
-        clientId: clientInfo.isEmpty ? null : clientInfo,
+        clientId: clientInfo.isEmpty ? null : clientId,
         items: cartSnapshot,
       );
     } on StockException catch (error) {
@@ -278,6 +777,12 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     );
     final receiptItems = cartSnapshot;
     _clearCart();
+    setState(() {
+      _clientInfoController.clear();
+      _selectedClientId = null;
+      _clientSearchTerm = '';
+    });
+    _clientInfoFocus.unfocus();
     if (_printCustomerReceipt) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -296,7 +801,93 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         items: receiptItems,
       );
     }
-    _clientInfoController.clear();
+  }
+
+  Future<String?> _ensureClientExists(String input) async {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return null;
+
+    // Try match existing by name or phone
+    final lower = trimmed.toLowerCase();
+    final existing = _patients.firstWhere(
+      (p) =>
+          p.name.toLowerCase() == lower ||
+          (p.phone.isNotEmpty && lower.contains(p.phone.replaceAll(' ', ''))),
+      orElse: () => const PatientModel(
+        id: '',
+        name: '',
+        phone: '',
+        nir: '',
+        mutuelle: '',
+        email: '',
+        dateOfBirthIso: '',
+      ),
+    );
+    if (existing.id.isNotEmpty) {
+      setState(() {
+        _selectedClientId = existing.id;
+        _clientInfoController.text = existing.displayLabel;
+      });
+      return existing.id;
+    }
+
+    // Parse "Nom - téléphone" if provided
+    String name = trimmed;
+    String phone = '';
+    if (trimmed.contains('-')) {
+      final parts = trimmed.split('-');
+      name = parts.first.trim();
+      phone = parts.skip(1).join('-').trim();
+    }
+    final phoneDigits = phone.replaceAll(RegExp(r'\\s+'), '');
+    if (!RegExp(r'^\\+?\\d{6,}$').hasMatch(phoneDigits)) {
+      phone = '';
+    }
+
+    final newId = await LocalDatabaseService.instance.insertQuickPatient(
+      name: name,
+      phone: phone,
+    );
+    final newPatient = PatientModel(
+      id: newId,
+      name: name,
+      phone: phone,
+      nir: '',
+      mutuelle: '',
+      email: '',
+      dateOfBirthIso: '',
+    );
+    setState(() {
+      _patients.add(newPatient);
+      _patients.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+      _selectedClientId = newId;
+    });
+    return newId;
+  }
+
+  void _tryAutoSelectClient(String input) {
+    final raw = input.trim();
+    if (raw.isEmpty) return;
+    final lower = raw.toLowerCase();
+    final normalizedDigits = lower.replaceAll(RegExp(r'\\s+'), '');
+    final match = _patients.where((p) {
+      final nameLower = p.name.toLowerCase();
+      final phoneDigits = p.phone.replaceAll(RegExp(r'\\s+'), '');
+      final nirLower = p.nir.toLowerCase();
+      return nameLower == lower ||
+          (phoneDigits.isNotEmpty && normalizedDigits.contains(phoneDigits)) ||
+          (nirLower.isNotEmpty && nirLower == lower);
+    }).toList();
+    if (match.length == 1) {
+      final p = match.first;
+      setState(() {
+        _selectedClientId = p.id;
+        _clientInfoController.text = p.displayLabel;
+        _clientSearchTerm = p.displayLabel;
+      });
+    }
   }
 
   void _processPayment() {
@@ -420,7 +1011,7 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
       padding: const EdgeInsets.all(24),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // On enlève la contrainte de hauteur fixe pour l'historique
+          // Hauteur un peu plus grande pour laisser respirer le panier.
           final rowHeight = constraints.maxHeight - 24;
           return SingleChildScrollView(
             child: ConstrainedBox(
@@ -433,7 +1024,7 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
 
                   // === SECTION PRINCIPALE : Scan + Produits + Panier + Totaux ===
                   SizedBox(
-                    height: rowHeight > 420 ? rowHeight : 420,
+                    height: rowHeight > 620 ? rowHeight : 620,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -622,7 +1213,7 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
 
   Widget _buildProductCard(Product product, ThemeColors palette) {
     return GestureDetector(
-      onTap: () => _addToCart(product),
+      onTap: () async => _addToCart(product),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -652,6 +1243,35 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (product.stupefiant || product.ordonnance || product.controle)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      if (product.stupefiant)
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 14,
+                          color: Colors.redAccent,
+                        ),
+                      if (product.ordonnance)
+                        const Icon(
+                          Icons.description,
+                          size: 14,
+                          color: Colors.deepPurple,
+                        ),
+                      if (product.controle)
+                        const Icon(
+                          Icons.verified_user,
+                          size: 14,
+                          color: Colors.orange,
+                        ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 4),
               Text(
                 '${product.price.toStringAsFixed(0)} FCFA',
@@ -664,10 +1284,7 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
               const SizedBox(height: 4),
               Text(
                 'Disponible: ${product.availableStock}',
-                style: TextStyle(
-                  color: palette.subText,
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: palette.subText, fontSize: 12),
               ),
             ],
           ),
@@ -681,7 +1298,7 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
       children: [
         Expanded(child: _buildCart(palette)),
         const SizedBox(height: 20),
-        _buildTotals(palette),
+        _buildTotals(palette, maxHeight: 380),
       ],
     );
   }
@@ -942,6 +1559,9 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
   }
 
   Widget _buildCartItem(CartItem item, int index, ThemeColors palette) {
+    final lotsText = item.lots != null && item.lots!.isNotEmpty
+        ? 'Lots: ${item.lots!.entries.map((e) => '${e.key} x${e.value}').join(', ')}'
+        : '';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -984,6 +1604,34 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                     fontSize: 15,
                   ),
                 ),
+                if (item.stupefiant || item.ordonnance || item.controle)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      children: [
+                        if (item.stupefiant)
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            size: 14,
+                            color: Colors.redAccent,
+                          ),
+                        if (item.ordonnance)
+                          const Icon(
+                            Icons.description,
+                            size: 14,
+                            color: Colors.deepPurple,
+                          ),
+                        if (item.controle)
+                          const Icon(
+                            Icons.verified_user,
+                            size: 14,
+                            color: Colors.orange,
+                          ),
+                      ],
+                    ),
+                  ),
                 Text(
                   '${item.price.toStringAsFixed(0)} FCFA',
                   style: const TextStyle(
@@ -991,13 +1639,39 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                     fontSize: 13,
                   ),
                 ),
+                if (lotsText.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      lotsText,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: palette.subText,
+                        fontFamily: 'Roboto Mono',
+                      ),
+                    ),
+                  ),
+                if (item.productId != null && item.productId!.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _editLotsForCartItem(index),
+                      icon: const Icon(Icons.layers, size: 16),
+                      label: const Text('Modifier lots'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: palette.subText,
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
           Row(
             children: [
               IconButton(
-                onPressed: () => _updateQuantity(index, item.quantity - 1),
+                onPressed: () => _removeOneFromCart(index),
                 icon: const Icon(
                   Icons.remove_circle_outline,
                   color: Color(0xFFEF4444),
@@ -1022,7 +1696,14 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
                 ),
               ),
               IconButton(
-                onPressed: () => _updateQuantity(index, item.quantity + 1),
+                onPressed: () async {
+                  final product = _findProduct(item.productId);
+                  if (product == null) {
+                    _updateQuantity(index, item.quantity + 1);
+                    return;
+                  }
+                  await _addToCart(product);
+                },
                 icon: const Icon(
                   Icons.add_circle_outline,
                   color: Color(0xFF10B981),
@@ -1049,153 +1730,216 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     );
   }
 
-  Widget _buildTotals(ThemeColors palette) {
-    return Container(
+  Widget _buildTotals(ThemeColors palette, {double? maxHeight}) {
+    final content = Column(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Remise',
+              style: TextStyle(color: palette.subText, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: SegmentedButton<_RemiseMode>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _RemiseMode.pourcentage,
+                          label: Text('%'),
+                          icon: Icon(Icons.percent, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: _RemiseMode.montant,
+                          label: Text('FCFA'),
+                          icon: Icon(Icons.money, size: 16),
+                        ),
+                      ],
+                      selected: {_remiseMode},
+                      onSelectionChanged: (v) {
+                        setState(() {
+                          _remiseMode = v.first;
+                          _remiseController.text =
+                              _remiseMode == _RemiseMode.pourcentage
+                              ? (_remisePercentage == 0
+                                    ? ''
+                                    : _remisePercentage.toStringAsFixed(0))
+                              : (_remiseAmount == 0
+                                    ? ''
+                                    : _remiseAmount.toStringAsFixed(0));
+                        });
+                      },
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 140,
+                  height: 44,
+                  child: TextField(
+                    controller: _remiseController,
+                    style: TextStyle(color: palette.text),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      hintStyle: TextStyle(color: palette.subText),
+                      suffixText: _remiseMode == _RemiseMode.pourcentage
+                          ? '%'
+                          : _currency,
+                      suffixStyle: TextStyle(color: palette.subText),
+                      filled: true,
+                      fillColor: palette.isDark
+                          ? Colors.grey[800]
+                          : Colors.grey[200],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        final parsed =
+                            double.tryParse(
+                              value.replaceAll(' ', '').replaceAll(',', '.'),
+                            ) ??
+                            0;
+                        if (_remiseMode == _RemiseMode.pourcentage) {
+                          _remisePercentage = parsed;
+                        } else {
+                          _remiseAmount = parsed;
+                        }
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Divider(color: palette.divider),
+        const SizedBox(height: 16),
+        _buildTotalRow('Sous-total', _sousTotal, false, palette),
+        const SizedBox(height: 12),
+        _buildTotalRow(
+          'Remise',
+          _montantRemise,
+          false,
+          palette,
+          color: const Color(0xFFEF4444),
+        ),
+        const SizedBox(height: 16),
+        Divider(color: palette.divider, thickness: 2),
+        const SizedBox(height: 16),
+        _buildTotalRow('TOTAL', _total, true, palette),
+        const SizedBox(height: 24),
+        PatientAutocompleteField(
+          palette: palette,
+          patients: _patients,
+          controller: _clientInfoController,
+          focusNode: _clientInfoFocus,
+          labelText: _clientFieldLabel,
+          hintText: 'Ex: Jean Dupont - 99XXXXXX (nouveau si non trouvé)',
+          onChanged: (v) => setState(() {
+            _selectedClientId = null;
+            _clientSearchTerm = v;
+          }),
+          onSubmitted: _tryAutoSelectClient,
+          onSelected: (p) {
+            setState(() {
+              _selectedClientId = p.id;
+              _clientInfoController.text = p.displayLabel;
+              _clientSearchTerm = p.displayLabel;
+            });
+          },
+        ),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Imprimer ticket client'),
+          value: _printCustomerReceipt,
+          onChanged: (value) => setState(() => _printCustomerReceipt = value),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildPaymentMethodButton('Espèces', Icons.money, palette),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildPaymentMethodButton(
+                'Carte',
+                Icons.credit_card,
+                palette,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildPaymentMethodButton(
+                'Mobile',
+                Icons.phone_android,
+                palette,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: _processPayment,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 8,
+              shadowColor: const Color(0xFF10B981).withOpacity(0.5),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.payment, size: 28),
+                SizedBox(width: 12),
+                Text(
+                  'PAYER',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final container = Container(
       padding: const EdgeInsets.all(20),
       decoration: _cardDecoration(palette),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Remise',
-                style: TextStyle(color: palette.subText, fontSize: 16),
-              ),
-              SizedBox(
-                width: 120,
-                child: TextField(
-                  style: TextStyle(color: palette.text),
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: '0',
-                    hintStyle: TextStyle(color: palette.subText),
-                    suffixText: '%',
-                    suffixStyle: TextStyle(color: palette.subText),
-                    filled: true,
-                    fillColor: palette.isDark
-                        ? Colors.grey[800]
-                        : Colors.grey[200],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  onChanged: (value) => setState(
-                    () => _remisePercentage = double.tryParse(value) ?? 0,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Divider(color: palette.divider),
-          const SizedBox(height: 16),
-          _buildTotalRow('Sous-total', _sousTotal, false, palette),
-          const SizedBox(height: 12),
-          _buildTotalRow(
-            'Remise',
-            _montantRemise,
-            false,
-            palette,
-            color: const Color(0xFFEF4444),
-          ),
-          const SizedBox(height: 16),
-          Divider(color: palette.divider, thickness: 2),
-          const SizedBox(height: 16),
-          _buildTotalRow('TOTAL', _total, true, palette),
-          const SizedBox(height: 24),
-          TextField(
-            controller: _clientInfoController,
-            style: TextStyle(color: palette.text),
-            decoration: InputDecoration(
-              labelText: _clientFieldLabel,
-              labelStyle: TextStyle(color: palette.subText),
-              hintText: 'Ex: Jean Dupont - 99XXXXXX',
-              hintStyle: TextStyle(color: palette.subText.withOpacity(0.7)),
-              filled: true,
-              fillColor: palette.isDark ? Colors.grey[900] : Colors.grey[200],
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
-              ),
-            ),
-          ),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Imprimer ticket client'),
-            value: _printCustomerReceipt,
-            onChanged: (value) => setState(() => _printCustomerReceipt = value),
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPaymentMethodButton(
-                  'Espèces',
-                  Icons.money,
-                  palette,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildPaymentMethodButton(
-                  'Carte',
-                  Icons.credit_card,
-                  palette,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildPaymentMethodButton(
-                  'Mobile',
-                  Icons.phone_android,
-                  palette,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: _processPayment,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 8,
-                shadowColor: const Color(0xFF10B981).withOpacity(0.5),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.payment, size: 28),
-                  SizedBox(width: 12),
-                  Text(
-                    'PAYER',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: maxHeight == null
+          ? content
+          : SingleChildScrollView(child: content),
     );
+
+    if (maxHeight == null) return container;
+    return SizedBox(height: maxHeight, child: container);
   }
 
   Widget _buildTotalRow(
@@ -1488,6 +2232,16 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         pharmacyPhone: _pharmacyPhone,
         pharmacyEmail: _pharmacyEmail,
         pharmacyOrderNumber: _pharmacyOrderNumber,
+        pharmacyWebsite: _pharmacyWebsite,
+        pharmacyHours: _pharmacyHours,
+        emergencyContact: _emergencyContact,
+        fiscalId: _fiscalId,
+        taxDetails: _taxDetails,
+        returnPolicy: _returnPolicy,
+        healthAdvice: _healthAdvice,
+        loyaltyMessage: _loyaltyMessage,
+        ticketLink: _ticketLink,
+        footerMessage: _ticketFooter,
       );
       await Printing.layoutPdf(onLayout: (_) => bytes);
     } catch (e) {
@@ -1524,6 +2278,16 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
         pharmacyPhone: _pharmacyPhone,
         pharmacyEmail: _pharmacyEmail,
         pharmacyOrderNumber: _pharmacyOrderNumber,
+        pharmacyWebsite: _pharmacyWebsite,
+        pharmacyHours: _pharmacyHours,
+        emergencyContact: _emergencyContact,
+        fiscalId: _fiscalId,
+        taxDetails: _taxDetails,
+        returnPolicy: _returnPolicy,
+        healthAdvice: _healthAdvice,
+        loyaltyMessage: _loyaltyMessage,
+        ticketLink: _ticketLink,
+        footerMessage: _ticketFooter,
       );
       final file = File(receiptPath);
       await file.writeAsBytes(bytes, flush: true);
@@ -1582,3 +2346,5 @@ class _VenteCaisseScreenState extends State<VenteCaisseScreen>
     }
   }
 }
+
+enum _RemiseMode { pourcentage, montant }

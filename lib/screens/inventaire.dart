@@ -1,12 +1,21 @@
 // screens/inventaire.dart
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../app_theme.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../models/inventory_models.dart';
 import '../services/inventory_service.dart';
 import '../services/auth_service.dart';
 import '../models/app_user.dart';
+import '../services/local_database_service.dart';
+import '../widgets/inventory_product_autocomplete_field.dart';
 
 class InventaireScreen extends StatefulWidget {
   const InventaireScreen({super.key});
@@ -320,59 +329,59 @@ class _InventaireScreenState extends State<InventaireScreen>
   }
 
   Widget _dialogueSaisieManuelle() {
-    String? codeSelectionne;
+    InventoryProductSnapshot? selectionne;
     final qtyManuelleCtrl = TextEditingController();
+    final produitCtrl = TextEditingController();
     String searchTerm = '';
+    List<InventoryProductSnapshot> lastFilteredOptions = [];
 
     return AlertDialog(
       title: const Text('Saisie manuelle'),
       content: StatefulBuilder(
         builder: (context, setStateDialog) {
           final seenCodes = <String>{};
-          final query = searchTerm.trim().toLowerCase();
-          final availableOptions = _stockSnapshots.where((snap) {
+          final filteredOptions = _stockSnapshots.where((snap) {
             final code = snap.code.trim().toUpperCase();
             if (code.isEmpty || _produitsScannes.contains(code)) return false;
             if (seenCodes.contains(code)) return false;
             seenCodes.add(code);
-            if (query.isNotEmpty) {
+            final q = searchTerm.trim().toLowerCase();
+            if (q.isNotEmpty) {
               final searchable =
                   '${snap.name.toLowerCase()} ${code.toLowerCase()}';
-              if (!searchable.contains(query)) return false;
+              if (!searchable.contains(q)) return false;
             }
             return true;
           }).toList();
+          lastFilteredOptions = filteredOptions;
           return SizedBox(
             width: 500,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  decoration: InputDecoration(
-                    labelText: 'Rechercher un produit',
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
+                  decoration: const InputDecoration(
+                    labelText: 'Recherche',
+                    hintText: 'Tapez pour filtrer la liste…',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.search),
                   ),
-                  onChanged: (value) =>
-                      setStateDialog(() => searchTerm = value),
+                  onChanged: (v) => setStateDialog(() {
+                    searchTerm = v;
+                    selectionne = null;
+                  }),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(
-                    labelText: 'Sélectionner un produit',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.medication),
-                  ),
-                  items: availableOptions
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e.code,
-                          child: Text('${e.name} (${e.code})'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setStateDialog(() => codeSelectionne = value),
+                InventoryProductAutocompleteField(
+                  key: ValueKey(searchTerm),
+                  controller: produitCtrl,
+                  options: filteredOptions,
+                  onSelected: (snap) => setStateDialog(() {
+                    selectionne = snap;
+                  }),
+                  onChanged: (_) => setStateDialog(() {
+                    selectionne = null;
+                  }),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -396,11 +405,39 @@ class _InventaireScreenState extends State<InventaireScreen>
         ),
         ElevatedButton(
           onPressed: () {
-            if (codeSelectionne != null) {
-              _scanController.text = codeSelectionne!;
+            var chosen = selectionne;
+            if (chosen == null) {
+              final raw = produitCtrl.text.trim();
+              if (raw.isNotEmpty) {
+                final lower = raw.toLowerCase();
+                chosen = lastFilteredOptions.firstWhere(
+                  (s) =>
+                      s.code.toLowerCase() == lower ||
+                      s.name.toLowerCase() == lower ||
+                      lower.contains(s.code.toLowerCase()),
+                  orElse: () => const InventoryProductSnapshot(
+                    medicamentId: '',
+                    code: '',
+                    name: '',
+                    theoreticalQty: 0,
+                    purchasePrice: 0,
+                    salePrice: 0,
+                    lot: '',
+                    expiry: null,
+                    category: '',
+                    location: '',
+                  ),
+                );
+                if (chosen.code.isEmpty) chosen = null;
+              }
+            }
+            if (chosen != null) {
+              _scanController.text = chosen.code;
               _qtyController.text = qtyManuelleCtrl.text;
               _scannerProduit();
               Navigator.pop(context);
+            } else {
+              _afficherErreur('Veuillez sélectionner un produit');
             }
           },
           child: const Text('AJOUTER'),
@@ -1727,7 +1764,349 @@ class _InventaireScreenState extends State<InventaireScreen>
   }
 
   void _exporterInventaire() {
-    _afficherInfo('Export en cours... (fonctionnalité à implémenter)');
+    if (_lignes.isEmpty) {
+      _afficherErreur('Aucun produit à exporter');
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        final palette = ThemeColors.from(context);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.picture_as_pdf),
+                  title: const Text('Exporter en PDF'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _exportInventairePdf();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.table_chart),
+                  title: const Text('Exporter en CSV'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _exportInventaireCsv();
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Icon(Icons.close, color: palette.subText),
+                  title: const Text('Annuler'),
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _exportInventairePdf() async {
+    try {
+      final settings = await LocalDatabaseService.instance.getSettings();
+      final logo = await _loadPdfLogo(settings.logoPath);
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Enregistrer l’inventaire PDF',
+        fileName:
+            'inventaire_${DateFormat('yyyyMMdd_HHmm').format(_dateInventaire)}.pdf',
+        allowedExtensions: ['pdf'],
+        type: FileType.custom,
+      );
+      if (path == null) return;
+
+      final doc = pw.Document();
+      final accent = PdfColors.teal600;
+      final headerStyle = pw.TextStyle(
+        fontSize: 18,
+        fontWeight: pw.FontWeight.bold,
+        color: PdfColors.white,
+      );
+      final subHeaderStyle = pw.TextStyle(fontSize: 10, color: PdfColors.white);
+      final sectionTitle = pw.TextStyle(
+        fontSize: 12,
+        fontWeight: pw.FontWeight.bold,
+        color: PdfColors.grey900,
+      );
+      final cellStyle = const pw.TextStyle(fontSize: 9);
+      final currency = NumberFormat('#,###', 'fr_FR');
+
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) {
+            return [
+              pw.Container(
+                padding: const pw.EdgeInsets.all(14),
+                decoration: pw.BoxDecoration(
+                  color: accent,
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        if (logo != null)
+                          pw.Container(
+                            width: 48,
+                            height: 48,
+                            margin: const pw.EdgeInsets.only(bottom: 6),
+                            child: pw.Image(logo, fit: pw.BoxFit.contain),
+                          ),
+                        pw.Text(
+                          settings.pharmacyName.isNotEmpty
+                              ? settings.pharmacyName
+                              : 'Pharmacie',
+                          style: headerStyle.copyWith(fontSize: 14),
+                        ),
+                        if (settings.pharmacyAddress.isNotEmpty)
+                          pw.Text(
+                            settings.pharmacyAddress,
+                            style: subHeaderStyle,
+                          ),
+                        if (settings.pharmacyPhone.isNotEmpty)
+                          pw.Text(
+                            'Tel: ${settings.pharmacyPhone}',
+                            style: subHeaderStyle,
+                          ),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Inventaire', style: headerStyle),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'Type: $_typeInventaire',
+                          style: subHeaderStyle,
+                        ),
+                        pw.Text(
+                          'Responsable: $_responsable',
+                          style: subHeaderStyle,
+                        ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          DateFormat(
+                            'dd/MM/yyyy HH:mm',
+                          ).format(_dateInventaire),
+                          style: subHeaderStyle,
+                        ),
+                        pw.Text(
+                          'Produits: ${_lignes.length}',
+                          style: subHeaderStyle,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 12),
+              pw.Text('Résumé', style: sectionTitle),
+              pw.SizedBox(height: 6),
+              pw.Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _kpiPdf('Produits scannés', '${_lignes.length}'),
+                  _kpiPdf('Écarts détectés', '$_nbEcarts'),
+                  _kpiPdf(
+                    'Valeur écart',
+                    '${currency.format(_valeurTotaleReelle - _valeurTotaleTheorique)} FCFA',
+                  ),
+                  _kpiPdf(
+                    'Excédents',
+                    '${currency.format(_valeurEcartPositif)} FCFA',
+                  ),
+                  _kpiPdf(
+                    'Manquants',
+                    '${currency.format(_valeurEcartNegatif)} FCFA',
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 12),
+              pw.Text('Détails des lignes', style: sectionTitle),
+              pw.SizedBox(height: 6),
+              pw.Table.fromTextArray(
+                headers: const [
+                  'Produit',
+                  'Lot',
+                  'Théo',
+                  'Réel',
+                  'Écart',
+                  'Valeur',
+                ],
+                data: _lignes.map((l) {
+                  return [
+                    l.name,
+                    l.lot,
+                    l.qtyTheorique.toString(),
+                    l.qtyReelle.toString(),
+                    l.ecart.toString(),
+                    currency.format(l.valeurEcart),
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
+                oddRowDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey50,
+                ),
+                cellStyle: cellStyle,
+                cellAlignment: pw.Alignment.centerLeft,
+                cellAlignments: {
+                  2: pw.Alignment.centerRight,
+                  3: pw.Alignment.centerRight,
+                  4: pw.Alignment.centerRight,
+                  5: pw.Alignment.centerRight,
+                },
+                border: const pw.TableBorder(
+                  horizontalInside: pw.BorderSide(
+                    width: .3,
+                    color: PdfColors.grey300,
+                  ),
+                ),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(3),
+                  1: const pw.FlexColumnWidth(1.6),
+                  2: const pw.FlexColumnWidth(0.8),
+                  3: const pw.FlexColumnWidth(0.8),
+                  4: const pw.FlexColumnWidth(0.8),
+                  5: const pw.FlexColumnWidth(1.2),
+                },
+              ),
+            ];
+          },
+        ),
+      );
+
+      final file = File(path);
+      await file.writeAsBytes(await doc.save());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF enregistré dans ${file.path}')),
+        );
+      }
+      await Printing.layoutPdf(onLayout: (_) => doc.save());
+    } catch (e) {
+      _afficherErreur('Export PDF échoué: $e');
+    }
+  }
+
+  Future<pw.ImageProvider?> _loadPdfLogo(String? path) async {
+    final p = (path ?? '').trim();
+    if (p.isEmpty) return null;
+    try {
+      final file = File(p);
+      if (!await file.exists()) return null;
+      final Uint8List bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return null;
+      return pw.MemoryImage(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  pw.Widget _kpiPdf(String label, String value) {
+    return pw.Container(
+      width: 160,
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            label,
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+          ),
+          pw.SizedBox(height: 2),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportInventaireCsv() async {
+    try {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Enregistrer l’inventaire CSV',
+        fileName:
+            'inventaire_${DateFormat('yyyyMMdd_HHmm').format(_dateInventaire)}.csv',
+        allowedExtensions: ['csv'],
+        type: FileType.custom,
+      );
+      if (path == null) return;
+
+      String esc(String v) {
+        final needsQuotes =
+            v.contains(';') || v.contains('\n') || v.contains('"');
+        final safe = v.replaceAll('"', '""');
+        return needsQuotes ? '"$safe"' : safe;
+      }
+
+      final rows = <List<String>>[
+        [
+          'Date',
+          'Type',
+          'Responsable',
+          'Produit',
+          'Categorie',
+          'Emplacement',
+          'Lot',
+          'Peremption',
+          'Qty_theorique',
+          'Qty_reelle',
+          'Ecart',
+          'Valeur_ecart',
+        ],
+        ..._lignes.map(
+          (l) => [
+            DateFormat('dd/MM/yyyy HH:mm').format(_dateInventaire),
+            _typeInventaire,
+            _responsable,
+            l.name,
+            l.categorie,
+            l.emplacement,
+            l.lot,
+            DateFormat('MM/yyyy').format(l.peremption),
+            l.qtyTheorique.toString(),
+            l.qtyReelle.toString(),
+            l.ecart.toString(),
+            l.valeurEcart.toString(),
+          ],
+        ),
+      ];
+
+      final csv = rows.map((r) => r.map(esc).join(';')).join('\n');
+      final file = File(path);
+      await file.writeAsString(csv, encoding: utf8);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV enregistré dans ${file.path}')),
+        );
+      }
+    } catch (e) {
+      _afficherErreur('Export CSV échoué: $e');
+    }
   }
 
   Future<void> _validerInventaire() async {

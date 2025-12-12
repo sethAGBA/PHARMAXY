@@ -4,6 +4,8 @@ import 'package:sqflite/sqflite.dart';
 
 import '../services/auth_service.dart';
 import '../services/local_database_service.dart';
+import '../services/product_service.dart';
+import '../models/lot_entry.dart';
 
 class RetoursScreen extends StatefulWidget {
   const RetoursScreen({super.key});
@@ -36,6 +38,7 @@ class _RetoursScreenState extends State<RetoursScreen>
   final TextEditingController _montantController = TextEditingController();
   final TextEditingController _commentController = TextEditingController();
   String? _selectedMotif;
+  List<LotEntry> _lotsForProduct = [];
   final List<String> _retourMotifs = [
     'Périmé',
     'Défectueux',
@@ -788,8 +791,6 @@ class _RetoursScreenState extends State<RetoursScreen>
                       onChanged: (value) {
                         dialogSetState(() {
                           _returnType = value ?? 'client';
-                        });
-                        setState(() {
                           _selectedEntity = null;
                           _entityController.clear();
                         });
@@ -910,48 +911,40 @@ class _RetoursScreenState extends State<RetoursScreen>
           style: TextStyle(fontWeight: FontWeight.w600, color: palette.subText),
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _entityController,
-                decoration: InputDecoration(
-                  hintText:
-                      'Sélectionnez un ${isClient ? 'client' : 'fournisseur'}',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  prefixIcon: Icon(
-                    isClient ? Icons.person : Icons.store,
-                    size: 20,
-                  ),
-                  suffixIcon: suggestions.isEmpty
-                      ? null
-                      : PopupMenuButton<_NamedEntity>(
-                          icon: const Icon(Icons.arrow_drop_down),
-                          tooltip:
-                              'Choisir un ${isClient ? 'client' : 'fournisseur'} enregistré',
-                          itemBuilder: (context) => suggestions
-                              .map(
-                                (entity) => PopupMenuItem(
-                                  value: entity,
-                                  child: Text(entity.label),
-                                ),
-                              )
-                              .toList(),
-                          onSelected: (entity) {
-                            dialogSetState(() {
-                              _selectedEntity = entity;
-                              _entityController.text = entity.label;
-                            });
-                          },
-                        ),
-                  filled: true,
-                  fillColor: palette.card,
+        Autocomplete<_NamedEntity>(
+          displayStringForOption: (o) => o.label,
+          optionsBuilder: (value) {
+            final q = value.text.trim().toLowerCase();
+            if (q.isEmpty) return const Iterable<_NamedEntity>.empty();
+            return suggestions.where((e) => e.label.toLowerCase().contains(q));
+          },
+          onSelected: (entity) {
+            dialogSetState(() {
+              _selectedEntity = entity;
+              _entityController.text = entity.label;
+            });
+          },
+          fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+            textController = _entityController;
+            return TextField(
+              controller: _entityController,
+              focusNode: focusNode,
+              onChanged: (_) => dialogSetState(() => _selectedEntity = null),
+              decoration: InputDecoration(
+                hintText:
+                    'Tapez pour chercher ou créer un ${isClient ? 'client' : 'fournisseur'}',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                prefixIcon: Icon(
+                  isClient ? Icons.person : Icons.store,
+                  size: 20,
+                ),
+                filled: true,
+                fillColor: palette.card,
               ),
-            ),
-          ],
+            );
+          },
         ),
       ],
     );
@@ -969,61 +962,94 @@ class _RetoursScreenState extends State<RetoursScreen>
           style: TextStyle(fontWeight: FontWeight.w600, color: palette.subText),
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _productController,
-                decoration: InputDecoration(
-                  hintText: 'Choisir un produit',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+        Autocomplete<_NamedEntity>(
+          displayStringForOption: (o) => o.label,
+          optionsBuilder: (value) {
+            final q = value.text.trim().toLowerCase();
+            if (q.isEmpty) return const Iterable<_NamedEntity>.empty();
+            return _produits.where((e) => e.label.toLowerCase().contains(q));
+          },
+          onSelected: (entity) async {
+            dialogSetState(() {
+              _selectedProduct = entity;
+              _productController.text = entity.label;
+              _lotsForProduct = [];
+              _lotController.clear();
+            });
+            try {
+              final lots = await ProductService.instance.fetchLotsForProduct(
+                entity.id,
+              );
+              if (!mounted) return;
+              dialogSetState(() => _lotsForProduct = lots);
+            } catch (_) {}
+          },
+          fieldViewBuilder:
+              (context, textController, focusNode, onFieldSubmitted) {
+                textController = _productController;
+                return TextField(
+                  controller: _productController,
+                  focusNode: focusNode,
+                  onChanged: (_) => dialogSetState(() {
+                    _selectedProduct = null;
+                    _lotsForProduct = [];
+                    _lotController.clear();
+                  }),
+                  decoration: InputDecoration(
+                    hintText: 'Tapez pour chercher un produit',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.medical_services_outlined,
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: palette.card,
                   ),
-                  prefixIcon: const Icon(
-                    Icons.medical_services_outlined,
-                    size: 20,
-                  ),
-                  suffixIcon: _produits.isEmpty
-                      ? null
-                      : PopupMenuButton<_NamedEntity>(
-                          icon: const Icon(Icons.arrow_drop_down),
-                          tooltip: 'Choisir un produit enregistré',
-                          itemBuilder: (context) => _produits
-                              .map(
-                                (entity) => PopupMenuItem(
-                                  value: entity,
-                                  child: Text(entity.label),
-                                ),
-                              )
-                              .toList(),
-                          onSelected: (entity) {
-                            dialogSetState(() {
-                              _selectedProduct = entity;
-                              _productController.text = entity.label;
-                            });
-                          },
-                        ),
-                  filled: true,
-                  fillColor: palette.card,
-                ),
-              ),
-            ),
-          ],
+                );
+              },
         ),
       ],
     );
   }
 
   Widget _buildLotField(_ThemeColors palette) {
-    return TextField(
-      controller: _lotController,
-      decoration: InputDecoration(
-        labelText: 'Lot / série',
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        prefixIcon: const Icon(Icons.numbers),
-        filled: true,
-        fillColor: palette.card,
-      ),
+    if (_lotsForProduct.isEmpty) {
+      return TextField(
+        controller: _lotController,
+        decoration: InputDecoration(
+          labelText: 'Lot / série',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          prefixIcon: const Icon(Icons.numbers),
+          filled: true,
+          fillColor: palette.card,
+        ),
+      );
+    }
+    return Autocomplete<LotEntry>(
+      displayStringForOption: (l) => l.lot,
+      optionsBuilder: (value) {
+        final q = value.text.trim().toLowerCase();
+        if (q.isEmpty) return _lotsForProduct;
+        return _lotsForProduct.where((l) => l.lot.toLowerCase().contains(q));
+      },
+      onSelected: (l) => _lotController.text = l.lot,
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        textController = _lotController;
+        return TextField(
+          controller: _lotController,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Lot / série',
+            hintText: 'Choisir un lot existant',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: const Icon(Icons.numbers),
+            filled: true,
+            fillColor: palette.card,
+          ),
+        );
+      },
     );
   }
 
@@ -1122,16 +1148,57 @@ class _RetoursScreenState extends State<RetoursScreen>
       );
       return false;
     }
-    final db = LocalDatabaseService.instance.db;
+    if (_lotsForProduct.isNotEmpty && _lotController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez choisir un lot pour ce produit.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+
+    final dbService = LocalDatabaseService.instance;
+    final db = dbService.db;
+
+    String entityId = _selectedEntity?.id ?? '';
+    if (entityId.isEmpty) {
+      if (_returnType == 'client') {
+        String name = entityName;
+        String phone = '';
+        if (entityName.contains('-')) {
+          final parts = entityName.split('-');
+          name = parts.first.trim();
+          phone = parts.skip(1).join('-').trim();
+        }
+        entityId = await dbService.insertQuickPatient(name: name, phone: phone);
+        _clients = await _fetchEntities(db, 'patients', 'name');
+      } else {
+        String nom = entityName;
+        String contact = '';
+        if (entityName.contains('-')) {
+          final parts = entityName.split('-');
+          nom = parts.first.trim();
+          contact = parts.skip(1).join('-').trim();
+        }
+        entityId = await dbService.insertQuickFournisseur(
+          nom: nom,
+          contact: contact,
+        );
+        _fournisseurs = await _fetchEntities(db, 'fournisseurs', 'nom');
+      }
+    }
+
+    final productId = _selectedProduct?.id ?? '';
     final id = 'RET-${DateTime.now().millisecondsSinceEpoch}';
     await db.insert('retours', {
       'id': id,
       'numero': id,
       'type': _returnType,
       'date': DateTime.now().toIso8601String(),
-      'entity_id': _selectedEntity?.id ?? '',
+      'entity_id': entityId,
       'entity_name': entityName,
-      'product_id': _selectedProduct?.id ?? '',
+      'product_id': productId,
       'product_name': productName,
       'lot': _lotController.text.trim(),
       'commande_date': _commandeDateController.text.trim(),
@@ -1164,6 +1231,7 @@ class _RetoursScreenState extends State<RetoursScreen>
     _selectedEntity = null;
     _selectedProduct = null;
     _selectedMotif = null;
+    _lotsForProduct = [];
     _returnType = 'client';
   }
 

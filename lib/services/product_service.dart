@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/sale_models.dart';
 import '../services/local_database_service.dart';
+import '../models/lot_entry.dart';
 
 class ProductService {
   ProductService._();
@@ -28,6 +29,9 @@ class ProductService {
         m.cip,
         m.famille,
         m.prix_vente,
+        m.ordonnance,
+        m.controle,
+        m.stupefiant,
         COALESCE(s.officine, 0) as officine
       FROM medicaments m
       LEFT JOIN stocks s ON s.medicament_id = m.id
@@ -45,6 +49,9 @@ class ProductService {
         price: (row['prix_vente'] as num?)?.toDouble() ?? 0,
         category: row['famille'] as String? ?? '',
         availableStock: (row['officine'] as int?) ?? 0,
+        ordonnance: (row['ordonnance'] as int? ?? 0) == 1,
+        controle: (row['controle'] as int? ?? 0) == 1,
+        stupefiant: (row['stupefiant'] as int? ?? 0) == 1,
       );
     }).toList();
 
@@ -77,13 +84,20 @@ class ProductService {
   Future<List<StockEntry>> fetchStockEntries() async {
     final db = _db.db;
     final query = '''
-      SELECT m.id, m.nom, m.dci, m.dosage, m.cip, m.famille, m.laboratoire, m.forme, m.prix_achat, m.prix_vente, m.tva, m.remboursement,
+      SELECT m.id, m.nom, m.dci, m.dosage, m.cip, m.famille, m.laboratoire, m.forme, m.prix_achat, m.prix_vente, m.tva, m.remboursement, m.stupefiant,
              m.sku, m.type, m.statut, m.description, m.fournisseur, m.localisation, m.ordonnance, m.controle, m.conditionnement, m.notice, m.image,
-             COALESCE(s.officine,0) as officine, COALESCE(s.reserve,0) as reserve,
+             COALESCE(SUM(l.quantite), s.officine, 0) as officine,
+             COALESCE(s.reserve,0) as reserve,
              COALESCE(s.seuil,0) as seuil, COALESCE(s.seuil_max,0) as seuil_max,
-             COALESCE(s.peremption,'') as peremption, COALESCE(s.lot,'') as lot
+             COALESCE(MIN(NULLIF(l.peremption,'')), s.peremption, '') as peremption,
+             COALESCE(
+               (SELECT lot FROM lots ll WHERE ll.medicament_id = m.id AND ll.peremption = (SELECT MIN(NULLIF(peremption,'')) FROM lots WHERE medicament_id = m.id) LIMIT 1),
+               s.lot,
+               ''
+             ) as lot
       FROM medicaments m
       LEFT JOIN stocks s ON s.medicament_id = m.id
+      LEFT JOIN lots l ON l.medicament_id = m.id
       GROUP BY m.id
     ''';
     final rows = await db.rawQuery(query);
@@ -104,6 +118,7 @@ class ProductService {
         prixVente: prixVente,
         tva: (row['tva'] as num?)?.toInt() ?? 0,
         remboursement: (row['remboursement'] as num?)?.toInt() ?? 0,
+        stupefiant: (row['stupefiant'] as int? ?? 0) == 1,
         qtyOfficine: qtyOfficine,
         qtyReserve: qtyReserve,
         seuil: row['seuil'] as int? ?? 0,
@@ -155,6 +170,7 @@ class ProductService {
     String? fournisseur,
     bool ordonnance = false,
     bool controle = false,
+    bool stupefiant = false,
     String? description,
     String? conditionnement,
     String? notice,
@@ -188,6 +204,7 @@ class ProductService {
       'fournisseur': fournisseur,
       'ordonnance': ordonnance ? 1 : 0,
       'controle': controle ? 1 : 0,
+      'stupefiant': stupefiant ? 1 : 0,
       'description': description,
       'conditionnement': conditionnement,
       'notice': notice,
@@ -210,11 +227,29 @@ class ProductService {
         'peremption': peremptionIso,
         'lot': lot,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+      // Seed first lot if provided
+      if (lot.trim().isNotEmpty && officine > 0) {
+        final lotsForProduct = await db.query(
+          'lots',
+          where: 'medicament_id = ?',
+          whereArgs: [productId],
+          limit: 1,
+        );
+        if (lotsForProduct.isEmpty) {
+          await db.insert('lots', {
+            'medicament_id': productId,
+            'lot': lot.trim(),
+            'peremption': peremptionIso,
+            'quantite': officine,
+          });
+        }
+      }
     } else {
       await db.update(
         'stocks',
         {
           'reserve': reserve,
+          // officine is computed from lots when available
           'officine': officine,
           'seuil': seuil,
           'seuil_max': seuilMax,
@@ -224,7 +259,87 @@ class ProductService {
         where: 'medicament_id = ?',
         whereArgs: [productId],
       );
+      // Do not overwrite existing lots from product form to avoid clobbering multi-lot data.
     }
+  }
+
+  Future<List<LotEntry>> fetchLotsForProduct(String medicamentId) async {
+    final rows = await _db.db.query(
+      'lots',
+      where: 'medicament_id = ?',
+      whereArgs: [medicamentId],
+      orderBy:
+          "CASE WHEN peremption IS NULL OR peremption = '' THEN 1 ELSE 0 END, peremption ASC, id ASC",
+    );
+    return rows
+        .map((r) => LotEntry.fromMap(Map<String, Object?>.from(r)))
+        .toList();
+  }
+
+  Future<void> upsertLot({
+    int? id,
+    required String medicamentId,
+    required String lot,
+    required String peremptionIso,
+    required int quantite,
+  }) async {
+    final db = _db.db;
+    if (id != null && id > 0) {
+      await db.update(
+        'lots',
+        {
+          'medicament_id': medicamentId,
+          'lot': lot.trim(),
+          'peremption': peremptionIso,
+          'quantite': quantite,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } else {
+      await db.insert('lots', {
+        'medicament_id': medicamentId,
+        'lot': lot.trim(),
+        'peremption': peremptionIso,
+        'quantite': quantite,
+      });
+    }
+    await _recomputeStockFromLots(medicamentId);
+  }
+
+  Future<void> deleteLot(int id, String medicamentId) async {
+    final db = _db.db;
+    await db.delete('lots', where: 'id = ?', whereArgs: [id]);
+    await _recomputeStockFromLots(medicamentId);
+  }
+
+  Future<void> _recomputeStockFromLots(String medicamentId) async {
+    final db = _db.db;
+    final sumRows = await db.rawQuery(
+      'SELECT COALESCE(SUM(quantite),0) as total FROM lots WHERE medicament_id = ?',
+      [medicamentId],
+    );
+    final total = (sumRows.first['total'] as num?)?.toInt() ?? 0;
+    final earliest = await db.query(
+      'lots',
+      where: 'medicament_id = ?',
+      whereArgs: [medicamentId],
+      orderBy:
+          "CASE WHEN peremption IS NULL OR peremption = '' THEN 1 ELSE 0 END, peremption ASC, id ASC",
+      limit: 1,
+    );
+    final earliestLot = earliest.isNotEmpty
+        ? earliest.first['lot'] as String? ?? ''
+        : '';
+    final earliestPeremption = earliest.isNotEmpty
+        ? earliest.first['peremption'] as String? ?? ''
+        : '';
+    await db.update(
+      'stocks',
+      {'officine': total, 'lot': earliestLot, 'peremption': earliestPeremption},
+      where: 'medicament_id = ?',
+      whereArgs: [medicamentId],
+    );
   }
 }
 
@@ -241,6 +356,7 @@ class StockEntry {
   final int prixVente;
   final int tva;
   final int remboursement;
+  final bool stupefiant;
   final int qtyOfficine;
   final int qtyReserve;
   final int seuil;
@@ -272,6 +388,7 @@ class StockEntry {
     required this.prixVente,
     required this.tva,
     required this.remboursement,
+    required this.stupefiant,
     required this.qtyOfficine,
     required this.qtyReserve,
     required this.seuil,

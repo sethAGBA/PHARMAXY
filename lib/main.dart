@@ -23,11 +23,11 @@ import 'screens/conseil_pharma.dart';
 import 'screens/stupefiants.dart';
 import 'screens/ecommerce.dart';
 import 'services/auth_service.dart';
+import 'services/license_service.dart';
 import 'services/local_database_service.dart';
 import 'widgets/sidebar.dart';
 
 void main() async {
-  
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR', null);
   await _initializeLocalData();
@@ -41,23 +41,23 @@ Future<void> _initializeLocalData() async {
   // Minimal bootstrap inspired by afroforma: init local DB and create a default admin.
   await LocalDatabaseService.instance.init();
   final existing = await LocalDatabaseService.instance.getUsers();
-    if (existing.isEmpty) {
-      await LocalDatabaseService.instance.insertUser(
-        AppUser(
-          id: 'admin',
-          name: 'Admin',
-          email: 'admin@pharmaxy.local',
-          password: 'admin123',
-          role: 'admin',
-          createdAt: DateTime.now(),
-          lastLogin: DateTime.now(),
-          isActive: true,
-          twoFactorEnabled: false,
-          totpSecret: null,
-          allowedScreens: const [],
-        ),
-      );
-    }
+  if (existing.isEmpty) {
+    await LocalDatabaseService.instance.insertUser(
+      AppUser(
+        id: 'admin',
+        name: 'Admin',
+        email: 'admin@pharmaxy.local',
+        password: 'admin123',
+        role: 'admin',
+        createdAt: DateTime.now(),
+        lastLogin: DateTime.now(),
+        isActive: true,
+        twoFactorEnabled: false,
+        totpSecret: null,
+        allowedScreens: const [],
+      ),
+    );
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -155,6 +155,9 @@ class _PharmacyDashboardState extends State<PharmacyDashboard>
   List<_NavEntry> _entries = [];
   List<Widget> _pages = [];
   List<NavItem> _navItems = [];
+  bool _licenseActive = true;
+  bool _allLicensesConsumed = false;
+  VoidCallback? _licenseListener;
 
   @override
   void initState() {
@@ -168,6 +171,28 @@ class _PharmacyDashboardState extends State<PharmacyDashboard>
     );
     _animationController.forward();
     _initNav();
+    // Build initial pages immediately to avoid empty navigation lists on first
+    // frame (which causes a RangeError when indexing _pages).
+    _buildNavigationForUser();
+    _initLicenseListener();
+  }
+
+  Future<void> _initLicenseListener() async {
+    await _refreshLicenseGate();
+    _licenseListener = () async {
+      await _refreshLicenseGate();
+    };
+    LicenseService.instance.activeNotifier.addListener(_licenseListener!);
+  }
+
+  Future<void> _refreshLicenseGate() async {
+    final active = await LicenseService.instance.hasActive();
+    final allUsed = await LicenseService.instance.allKeysUsed();
+    if (!mounted) return;
+    setState(() {
+      _licenseActive = active;
+      _allLicensesConsumed = allUsed;
+    });
     _buildNavigationForUser();
   }
 
@@ -298,12 +323,18 @@ class _PharmacyDashboardState extends State<PharmacyDashboard>
 
   @override
   void dispose() {
+    if (_licenseListener != null) {
+      LicenseService.instance.activeNotifier.removeListener(_licenseListener!);
+    }
     _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_pages.isEmpty) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
       body: Row(
         children: [
@@ -335,10 +366,15 @@ class _PharmacyDashboardState extends State<PharmacyDashboard>
   void _buildNavigationForUser() {
     final allowed = widget.currentUser.allowedScreens;
     final allowedSet = allowed.isEmpty ? null : allowed.toSet();
-    _entries = _allEntries
-        .where((entry) => allowedSet == null || allowedSet.contains(entry.id))
-        .toList();
-    if (_entries.isEmpty) {
+    final licenseOk = _licenseActive || _allLicensesConsumed;
+    if (!licenseOk) {
+      _entries = _allEntries.where((e) => e.id == 'parametrage').toList();
+    } else {
+      _entries = _allEntries
+          .where((entry) => allowedSet == null || allowedSet.contains(entry.id))
+          .toList();
+    }
+    if (_entries.isEmpty && licenseOk) {
       _entries = _allEntries;
     }
     _navItems = _entries.map((e) => e.nav).toList();

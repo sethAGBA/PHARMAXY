@@ -151,9 +151,7 @@ class _LoginScreenState extends State<LoginScreen>
   Future<bool> _requireDoubleAuth(AppUser user) async {
     if (!user.twoFactorEnabled) return true;
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => DoubleAuthenticationScreen(user: user),
-      ),
+      MaterialPageRoute(builder: (_) => DoubleAuthenticationScreen(user: user)),
     );
     return result == true;
   }

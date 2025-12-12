@@ -6,6 +6,11 @@ import 'package:sqflite/sqflite.dart';
 import '../models/app_user.dart';
 import '../models/caisse_settings.dart';
 import '../models/app_settings.dart';
+import '../models/tiers_payant.dart';
+import '../models/marges_settings.dart';
+import '../models/preparation_magistrale.dart';
+import '../models/stupefiant_mouvement.dart';
+import '../models/patient_model.dart';
 
 /// SQLite-backed local database service (offline-first).
 class LocalDatabaseService {
@@ -20,7 +25,7 @@ class LocalDatabaseService {
     final dbPath = p.join(dir.path, 'pharmaxy.db');
     _db = await openDatabase(
       dbPath,
-      version: 17,
+      version: 21,
       onCreate: (db, version) async {
         await _createSchema(db);
       },
@@ -43,6 +48,10 @@ class LocalDatabaseService {
         if (oldVersion < 15) await _migrateV15(db);
         if (oldVersion < 16) await _migrateV16(db);
         if (oldVersion < 17) await _migrateV17(db);
+        if (oldVersion < 18) await _migrateV18(db);
+        if (oldVersion < 19) await _migrateV19(db);
+        if (oldVersion < 20) await _migrateV20(db);
+        if (oldVersion < 21) await _migrateV21(db);
       },
     );
     await _seedDemoData();
@@ -54,6 +63,53 @@ class LocalDatabaseService {
   Future<List<AppUser>> getUsers() async {
     final rows = await db.query('utilisateurs', orderBy: 'created_at DESC');
     return rows.map(AppUser.fromMap).toList();
+  }
+
+  Future<List<PatientModel>> getPatientsLite() async {
+    final rows = await db.query('patients', orderBy: 'name ASC');
+    return rows
+        .map((r) => PatientModel.fromMap(Map<String, Object?>.from(r)))
+        .toList();
+  }
+
+  Future<String> insertQuickPatient({
+    required String name,
+    String phone = '',
+  }) async {
+    final patientId = 'PAT-${DateTime.now().millisecondsSinceEpoch}';
+    await db.insert('patients', {
+      'id': patientId,
+      'name': name,
+      'phone': phone,
+      'email': '',
+      'mutuelle': '',
+      'nir': '',
+      'date_of_birth': '',
+      'allergies': '',
+      'contraindications': '',
+      'points': 0,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    return patientId;
+  }
+
+  Future<List<Map<String, Object?>>> getFournisseursLite() async {
+    final rows = await db.query('fournisseurs', orderBy: 'nom ASC');
+    return rows.map((r) => Map<String, Object?>.from(r)).toList();
+  }
+
+  Future<String> insertQuickFournisseur({
+    required String nom,
+    String contact = '',
+  }) async {
+    final fournisseurId = 'FRN-${DateTime.now().millisecondsSinceEpoch}';
+    await db.insert('fournisseurs', {
+      'id': fournisseurId,
+      'nom': nom,
+      'contact': contact,
+      'email': '',
+    });
+    return fournisseurId;
   }
 
   Future<void> insertUser(AppUser user) async {
@@ -83,28 +139,14 @@ class LocalDatabaseService {
       for (final row in rows)
         (row['cle'] as String): (row['valeur'] as String?) ?? '',
     };
-    return AppSettings(
-      currency: map['currency'] ?? 'XOF',
-      logoPath: map['logoPath'] ?? '',
-      pharmacyName: map['pharmacy_name'] ?? 'Pharmacie PHARMAXY',
-      pharmacyAddress: map['pharmacy_address'] ?? '',
-      pharmacyPhone: map['pharmacy_phone'] ?? '',
-      pharmacyEmail: map['pharmacy_email'] ?? '',
-      pharmacyOrderNumber: map['pharmacy_order_number'] ?? '',
-    );
+    return AppSettings.fromMap(map);
   }
 
   Future<void> saveSettings(AppSettings settings) async {
-    await _upsertParameter('currency', settings.currency);
-    await _upsertParameter('logoPath', settings.logoPath);
-    await _upsertParameter('pharmacy_name', settings.pharmacyName);
-    await _upsertParameter('pharmacy_address', settings.pharmacyAddress);
-    await _upsertParameter('pharmacy_phone', settings.pharmacyPhone);
-    await _upsertParameter('pharmacy_email', settings.pharmacyEmail);
-    await _upsertParameter(
-      'pharmacy_order_number',
-      settings.pharmacyOrderNumber,
-    );
+    final data = settings.toMap();
+    for (final entry in data.entries) {
+      await _upsertParameter(entry.key, entry.value as String? ?? '');
+    }
   }
 
   Future<void> _upsertParameter(String key, String value) async {
@@ -136,6 +178,99 @@ class LocalDatabaseService {
       'cle': 'caisse',
       'valeur': settings.toJsonString(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<MargesSettings> getMargesSettings() async {
+    final rows = await db.query(
+      'parametres',
+      where: 'cle = ?',
+      whereArgs: ['marges'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return MargesSettings.defaults();
+    final value = rows.first['valeur'] as String? ?? '';
+    if (value.isEmpty) return MargesSettings.defaults();
+    try {
+      return MargesSettings.fromJsonString(value);
+    } catch (_) {
+      return MargesSettings.defaults();
+    }
+  }
+
+  Future<void> saveMargesSettings(MargesSettings settings) async {
+    await db.insert('parametres', {
+      'cle': 'marges',
+      'valeur': settings.toJsonString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<TiersPayant>> getTiersPayants() async {
+    final rows = await db.query('tiers_payants', orderBy: 'created_at DESC');
+    return rows.map(TiersPayant.fromMap).toList();
+  }
+
+  Future<void> upsertTiersPayant(TiersPayant tiers) async {
+    await db.insert(
+      'tiers_payants',
+      tiers.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteTiersPayant(String id) async {
+    await db.delete('tiers_payants', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<PreparationMagistrale>> getPreparationsMagistrales() async {
+    final rows = await db.query(
+      'preparation_magistrales',
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(PreparationMagistrale.fromMap).toList();
+  }
+
+  Future<void> upsertPreparationMagistrale(
+    PreparationMagistrale preparation,
+  ) async {
+    await db.insert(
+      'preparation_magistrales',
+      preparation.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deletePreparationMagistrale(String id) async {
+    await db.delete(
+      'preparation_magistrales',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<List<StupefiantMouvement>> getStupefiantMouvements() async {
+    final rows = await db.query('stupefiant_registre', orderBy: 'date DESC');
+    return rows.map(StupefiantMouvement.fromMap).toList();
+  }
+
+  Future<int> insertStupefiantMouvement(StupefiantMouvement mouvement) async {
+    return db.insert(
+      'stupefiant_registre',
+      mouvement.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateStupefiantMouvement(StupefiantMouvement mouvement) async {
+    await db.update(
+      'stupefiant_registre',
+      mouvement.toMap(),
+      where: 'id = ?',
+      whereArgs: [mouvement.id],
+    );
+  }
+
+  Future<void> deleteStupefiantMouvement(int id) async {
+    await db.delete('stupefiant_registre', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> _createSchema(Database db) async {
@@ -194,6 +329,7 @@ class LocalDatabaseService {
         remboursement REAL,
         ordonnance INTEGER DEFAULT 0,
         controle INTEGER DEFAULT 0,
+        stupefiant INTEGER DEFAULT 0,
         description TEXT,
         fournisseur TEXT,
         localisation TEXT,
@@ -361,9 +497,17 @@ class LocalDatabaseService {
         id TEXT PRIMARY KEY,
         nom TEXT,
         description TEXT,
+        categorie TEXT,
+        quantite_totale INTEGER,
+        unite TEXT,
+        composants_json TEXT,
+        instructions TEXT,
+        conservation TEXT,
+        posologie TEXT,
         statut TEXT,
         cout REAL,
-        prix REAL
+        prix REAL,
+        created_at TEXT
       );
     ''');
     await db.execute('''
@@ -391,6 +535,19 @@ class LocalDatabaseService {
       CREATE TABLE IF NOT EXISTS parametres_pharmacie (
         key TEXT PRIMARY KEY,
         value TEXT
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tiers_payants (
+        id TEXT PRIMARY KEY,
+        nom TEXT,
+        type TEXT,
+        taux_prise_en_charge INTEGER,
+        delai_paiement INTEGER,
+        actif INTEGER DEFAULT 1,
+        nb_patients INTEGER DEFAULT 0,
+        montant_en_attente INTEGER DEFAULT 0,
+        created_at TEXT
       );
     ''');
     await db.execute('''
@@ -439,17 +596,49 @@ class LocalDatabaseService {
       );
     ''');
     final userCols = await db.rawQuery("PRAGMA table_info('utilisateurs')");
-    final userNames =
-        userCols.map((c) => (c['name'] as String?) ?? '').toSet();
+    final userNames = userCols.map((c) => (c['name'] as String?) ?? '').toSet();
     if (!userNames.contains('two_factor_enabled')) {
       await db.execute(
         'ALTER TABLE utilisateurs ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0;',
       );
     }
     if (!userNames.contains('totp_secret')) {
-      await db.execute(
-        'ALTER TABLE utilisateurs ADD COLUMN totp_secret TEXT;',
+      await db.execute('ALTER TABLE utilisateurs ADD COLUMN totp_secret TEXT;');
+    }
+  }
+
+  Future<void> _migrateV21(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS lots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        medicament_id TEXT,
+        lot TEXT,
+        peremption TEXT,
+        quantite INTEGER
       );
+    ''');
+    // Seed lots from legacy stocks.lot/peremption if lots empty per product.
+    final legacyStocks = await db.query('stocks');
+    for (final s in legacyStocks) {
+      final medicamentId = s['medicament_id'] as String? ?? '';
+      final lot = (s['lot'] as String?)?.trim() ?? '';
+      final peremption = (s['peremption'] as String?) ?? '';
+      final officine = (s['officine'] as int?) ?? 0;
+      if (medicamentId.isEmpty || lot.isEmpty || officine <= 0) continue;
+      final existingLot = await db.query(
+        'lots',
+        where: 'medicament_id = ?',
+        whereArgs: [medicamentId],
+        limit: 1,
+      );
+      if (existingLot.isEmpty) {
+        await db.insert('lots', {
+          'medicament_id': medicamentId,
+          'lot': lot,
+          'peremption': peremption,
+          'quantite': officine,
+        });
+      }
     }
   }
 
@@ -609,6 +798,37 @@ class LocalDatabaseService {
         statut TEXT
       );
     ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS preparation_magistrales (
+        id TEXT PRIMARY KEY,
+        nom TEXT,
+        description TEXT,
+        categorie TEXT,
+        quantite_totale INTEGER,
+        unite TEXT,
+        composants_json TEXT,
+        instructions TEXT,
+        conservation TEXT,
+        posologie TEXT,
+        statut TEXT,
+        cout REAL,
+        prix REAL,
+        created_at TEXT
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tiers_payants (
+        id TEXT PRIMARY KEY,
+        nom TEXT,
+        type TEXT,
+        taux_prise_en_charge INTEGER,
+        delai_paiement INTEGER,
+        actif INTEGER DEFAULT 1,
+        nb_patients INTEGER DEFAULT 0,
+        montant_en_attente INTEGER DEFAULT 0,
+        created_at TEXT
+      );
+    ''');
   }
 
   Future<void> _migrateV9(Database db) async {
@@ -718,9 +938,7 @@ class LocalDatabaseService {
 
   Future<void> _migrateV16(Database db) async {
     final cols = await db.rawQuery("PRAGMA table_info('utilisateurs')");
-    final names = cols
-        .map((c) => (c['name'] as String?) ?? '')
-        .toSet();
+    final names = cols.map((c) => (c['name'] as String?) ?? '').toSet();
     if (!names.contains('two_factor_enabled')) {
       await db.execute(
         'ALTER TABLE utilisateurs ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 1;',
@@ -730,12 +948,57 @@ class LocalDatabaseService {
 
   Future<void> _migrateV17(Database db) async {
     final cols = await db.rawQuery("PRAGMA table_info('utilisateurs')");
-    final names = cols
-        .map((c) => (c['name'] as String?) ?? '')
-        .toSet();
+    final names = cols.map((c) => (c['name'] as String?) ?? '').toSet();
     if (!names.contains('totp_secret')) {
+      await db.execute('ALTER TABLE utilisateurs ADD COLUMN totp_secret TEXT;');
+    }
+  }
+
+  Future<void> _migrateV18(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tiers_payants (
+        id TEXT PRIMARY KEY,
+        nom TEXT,
+        type TEXT,
+        taux_prise_en_charge INTEGER,
+        delai_paiement INTEGER,
+        actif INTEGER DEFAULT 1,
+        nb_patients INTEGER DEFAULT 0,
+        montant_en_attente INTEGER DEFAULT 0,
+        created_at TEXT
+      );
+    ''');
+  }
+
+  Future<void> _migrateV19(Database db) async {
+    final cols = await db.rawQuery(
+      "PRAGMA table_info('preparation_magistrales')",
+    );
+    final names = cols.map((c) => (c['name'] as String?) ?? '').toSet();
+    Future<void> addIfMissing(String name, String sqlType) async {
+      if (!names.contains(name)) {
+        await db.execute(
+          'ALTER TABLE preparation_magistrales ADD COLUMN $name $sqlType;',
+        );
+      }
+    }
+
+    await addIfMissing('categorie', 'TEXT');
+    await addIfMissing('quantite_totale', 'INTEGER');
+    await addIfMissing('unite', 'TEXT');
+    await addIfMissing('composants_json', 'TEXT');
+    await addIfMissing('instructions', 'TEXT');
+    await addIfMissing('conservation', 'TEXT');
+    await addIfMissing('posologie', 'TEXT');
+    await addIfMissing('created_at', 'TEXT');
+  }
+
+  Future<void> _migrateV20(Database db) async {
+    final cols = await db.rawQuery("PRAGMA table_info('medicaments')");
+    final names = cols.map((c) => (c['name'] as String?) ?? '').toSet();
+    if (!names.contains('stupefiant')) {
       await db.execute(
-        'ALTER TABLE utilisateurs ADD COLUMN totp_secret TEXT;',
+        'ALTER TABLE medicaments ADD COLUMN stupefiant INTEGER NOT NULL DEFAULT 0;',
       );
     }
   }

@@ -35,5 +35,3 @@ Ajoutez des widget tests ciblés pour les nouveaux écrans/flux (headers, tabs, 
 - Evitez de toucher aux dossiers platformes (`android/`, `ios/`, `web/`, etc.) sauf besoin spécifique.
 - Pour toute modification de `pubspec.yaml`, exécutez `flutter pub get` avant de compiler.
 # PHARMAXY
-# PHARMAXY
-# PHARMAXY

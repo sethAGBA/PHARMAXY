@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 
 class Product {
   final String id;
@@ -7,6 +8,9 @@ class Product {
   final double price;
   final String category;
   final int availableStock;
+  final bool ordonnance;
+  final bool controle;
+  final bool stupefiant;
 
   const Product({
     required this.id,
@@ -15,6 +19,9 @@ class Product {
     required this.price,
     required this.category,
     this.availableStock = 0,
+    this.ordonnance = false,
+    this.controle = false,
+    this.stupefiant = false,
   });
 }
 
@@ -24,6 +31,10 @@ class CartItem {
   final String barcode;
   final double price;
   final String category;
+  final bool ordonnance;
+  final bool controle;
+  final bool stupefiant;
+  final Map<String, int>? lots;
   int quantity;
 
   CartItem({
@@ -33,6 +44,10 @@ class CartItem {
     required this.price,
     required this.category,
     required this.quantity,
+    this.ordonnance = false,
+    this.controle = false,
+    this.stupefiant = false,
+    this.lots,
   });
 
   Map<String, Object?> toMap() {
@@ -43,10 +58,30 @@ class CartItem {
       'price': price,
       'category': category,
       'quantity': quantity,
+      'ordonnance': ordonnance ? 1 : 0,
+      'controle': controle ? 1 : 0,
+      'stupefiant': stupefiant ? 1 : 0,
+      if (lots != null) 'lots': jsonEncode(lots),
     };
   }
 
   factory CartItem.fromMap(Map<String, Object?> map) {
+    Map<String, int>? parsedLots;
+    final lotsRaw = map['lots'];
+    if (lotsRaw is String && lotsRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(lotsRaw);
+        if (decoded is Map) {
+          parsedLots = decoded.map(
+            (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+          );
+        }
+      } catch (_) {}
+    } else if (lotsRaw is Map) {
+      parsedLots = lotsRaw.map(
+        (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+      );
+    }
     return CartItem(
       productId: map['product_id'] as String?,
       name: map['name'] as String? ?? '',
@@ -54,6 +89,25 @@ class CartItem {
       price: (map['price'] as num?)?.toDouble() ?? 0,
       category: map['category'] as String? ?? '',
       quantity: (map['quantity'] as num?)?.toInt() ?? 1,
+      ordonnance: (map['ordonnance'] as num?)?.toInt() == 1,
+      controle: (map['controle'] as num?)?.toInt() == 1,
+      stupefiant: (map['stupefiant'] as num?)?.toInt() == 1,
+      lots: parsedLots,
+    );
+  }
+
+  CartItem copyWith({int? quantity, Map<String, int>? lots}) {
+    return CartItem(
+      productId: productId,
+      name: name,
+      barcode: barcode,
+      price: price,
+      category: category,
+      quantity: quantity ?? this.quantity,
+      ordonnance: ordonnance,
+      controle: controle,
+      stupefiant: stupefiant,
+      lots: lots ?? this.lots,
     );
   }
 }

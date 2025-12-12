@@ -1,6 +1,7 @@
 // screens/reporting_stats.dart
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,8 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../app_theme.dart';
 import '../services/local_database_service.dart';
+import '../widgets/stats_card.dart';
+import '../models/sale_models.dart';
 
 class ReportingStatsScreen extends StatefulWidget {
   const ReportingStatsScreen({super.key});
@@ -70,6 +73,7 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
       _error = null;
     });
     try {
+      await LocalDatabaseService.instance.init();
       _caData.clear();
       _topProduits.clear();
       _topVendeurs.clear();
@@ -190,8 +194,9 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
       marge = 0;
     }
 
-    final previousRange =
-        filter.range != null ? _previousRange(filter.range!) : null;
+    final previousRange = filter.range != null
+        ? _previousRange(filter.range!)
+        : null;
     double previousCa = 0;
     if (previousRange != null) {
       previousCa = await _sumSalesBetween(previousRange);
@@ -228,19 +233,66 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
       LIMIT 5
     ''', args);
 
+    if (rows.isNotEmpty) {
+      setState(() {
+        _topProduits
+          ..clear()
+          ..addAll(
+            rows.map(
+              (r) => TopProduit(
+                nom: (r['nom'] as String?)?.isNotEmpty == true
+                    ? r['nom'] as String
+                    : (r['medicament_id'] as String? ?? ''),
+                ventes: (r['qte'] as num?)?.toInt() ?? 0,
+                ca: (r['ca'] as num?)?.toInt() ?? 0,
+              ),
+            ),
+          );
+      });
+      return;
+    }
+
+    // Fallback: compute from ventes.details JSON if lignes_vente empty
+    final ventesRows = await db.query(
+      'ventes',
+      columns: ['details', 'statut'],
+      where: filter.where,
+      whereArgs: filter.args,
+    );
+    final Map<String, int> qteById = {};
+    final Map<String, double> caById = {};
+    final Map<String, String> nameById = {};
+    for (final v in ventesRows) {
+      final statut = (v['statut'] as String? ?? '').toLowerCase();
+      if (statut.contains('annul')) continue;
+      final details = v['details'] as String?;
+      if (details == null || details.isEmpty) continue;
+      try {
+        final parsed = jsonDecode(details) as List<dynamic>;
+        for (final e in parsed) {
+          final item = CartItem.fromMap(Map<String, Object?>.from(e as Map));
+          final id = item.productId ?? item.barcode;
+          qteById[id] = (qteById[id] ?? 0) + item.quantity;
+          caById[id] = (caById[id] ?? 0) + (item.price * item.quantity);
+          nameById[id] = item.name;
+        }
+      } catch (_) {}
+    }
+    final ranked = qteById.keys.toList()
+      ..sort((a, b) => (qteById[b] ?? 0).compareTo(qteById[a] ?? 0));
     setState(() {
       _topProduits
         ..clear()
         ..addAll(
-          rows.map(
-            (r) => TopProduit(
-              nom: (r['nom'] as String?)?.isNotEmpty == true
-                  ? r['nom'] as String
-                  : (r['medicament_id'] as String? ?? ''),
-              ventes: (r['qte'] as num?)?.toInt() ?? 0,
-              ca: (r['ca'] as num?)?.toInt() ?? 0,
-            ),
-          ),
+          ranked
+              .take(5)
+              .map(
+                (id) => TopProduit(
+                  nom: nameById[id] ?? id,
+                  ventes: qteById[id] ?? 0,
+                  ca: (caById[id] ?? 0).toInt(),
+                ),
+              ),
         );
     });
   }
@@ -261,21 +313,88 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
       GROUP BY m.famille
       ORDER BY ca DESC
     ''', args);
-    final total = rows.fold<num>(0, (sum, r) => sum + ((r['ca'] as num?) ?? 0));
+    if (rows.isNotEmpty) {
+      final total = rows.fold<num>(
+        0,
+        (sum, r) => sum + ((r['ca'] as num?) ?? 0),
+      );
+      setState(() {
+        _familles
+          ..clear()
+          ..addAll(
+            rows.map((r) {
+              final ca = (r['ca'] as num?)?.toInt() ?? 0;
+              final famille = (r['famille'] as String?)?.isNotEmpty == true
+                  ? r['famille'] as String
+                  : 'Non définie';
+              final pourc = total == 0 ? 0.0 : (ca / total) * 100;
+              return FamilleStats(
+                famille: famille,
+                ca: ca,
+                pourcentage: pourc.toDouble(),
+              );
+            }),
+          );
+      });
+      return;
+    }
+
+    // Fallback from ventes.details JSON
+    final ventesRows = await db.query(
+      'ventes',
+      columns: ['details', 'statut'],
+      where: filter.where,
+      whereArgs: filter.args,
+    );
+    final Map<String, double> caByFamille = {};
+    final ids = <String>{};
+    final itemsById = <String, double>{};
+    for (final v in ventesRows) {
+      final statut = (v['statut'] as String? ?? '').toLowerCase();
+      if (statut.contains('annul')) continue;
+      final details = v['details'] as String?;
+      if (details == null || details.isEmpty) continue;
+      try {
+        final parsed = jsonDecode(details) as List<dynamic>;
+        for (final e in parsed) {
+          final item = CartItem.fromMap(Map<String, Object?>.from(e as Map));
+          final id = item.productId ?? item.barcode;
+          ids.add(id);
+          itemsById[id] = (itemsById[id] ?? 0) + (item.price * item.quantity);
+        }
+      } catch (_) {}
+    }
+    if (ids.isEmpty) {
+      setState(() => _familles.clear());
+      return;
+    }
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    final meds = await db.rawQuery(
+      'SELECT id, famille FROM medicaments WHERE id IN ($placeholders)',
+      ids.toList(),
+    );
+    final famById = {
+      for (final m in meds)
+        (m['id'] as String): (m['famille'] as String?) ?? 'Non définie',
+    };
+    for (final id in ids) {
+      final famille = famById[id] ?? 'Non définie';
+      caByFamille[famille] = (caByFamille[famille] ?? 0) + (itemsById[id] ?? 0);
+    }
+    final total = caByFamille.values.fold<double>(0, (a, b) => a + b);
+    final ordered = caByFamille.keys.toList()
+      ..sort((a, b) => (caByFamille[b] ?? 0).compareTo(caByFamille[a] ?? 0));
     setState(() {
       _familles
         ..clear()
         ..addAll(
-          rows.map((r) {
-            final ca = (r['ca'] as num?)?.toInt() ?? 0;
-            final famille = (r['famille'] as String?)?.isNotEmpty == true
-                ? r['famille'] as String
-                : 'Non définie';
+          ordered.map((famille) {
+            final ca = caByFamille[famille] ?? 0;
             final pourc = total == 0 ? 0.0 : (ca / total) * 100;
             return FamilleStats(
               famille: famille,
-              ca: ca,
-              pourcentage: pourc.toDouble(),
+              ca: ca.toInt(),
+              pourcentage: pourc,
             );
           }),
         );
@@ -351,28 +470,30 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
+                        final isWide = constraints.maxWidth > 1100;
                         return SingleChildScrollView(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: constraints.maxHeight,
-                            ),
-                            child: IntrinsicHeight(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: _buildGraphiques(palette, accent),
-                                  ),
-                                  const SizedBox(width: 24),
-                                  Expanded(
-                                    flex: 2,
-                                    child: _buildClassements(palette, accent),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          child: isWide
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: _buildGraphiques(palette, accent),
+                                    ),
+                                    const SizedBox(width: 24),
+                                    Expanded(
+                                      flex: 2,
+                                      child: _buildClassements(palette, accent),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    _buildGraphiques(palette, accent),
+                                    const SizedBox(height: 24),
+                                    _buildClassements(palette, accent),
+                                  ],
+                                ),
                         );
                       },
                     ),
@@ -384,54 +505,78 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
   }
 
   Widget _buildHeader(ThemeColors palette, Color accent) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: accent.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.12),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Icon(Icons.bar_chart, color: accent, size: 34),
+        ),
+        const SizedBox(width: 14),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.bar_chart, color: accent, size: 40),
-            const SizedBox(width: 16),
             Text(
               'Reporting & Statistiques',
               style: TextStyle(
-                fontSize: 34,
+                fontSize: 30,
                 fontWeight: FontWeight.bold,
                 color: palette.text,
                 letterSpacing: 1.2,
               ),
             ),
+            Text(
+              'Analyse complète de l\'activité • CA • Marges • Tendances',
+              style: TextStyle(fontSize: 15, color: palette.subText),
+            ),
           ],
-        ),
-        Text(
-          'Analyse complète de l\'activité • CA • Marges • Tendances',
-          style: TextStyle(fontSize: 16, color: palette.subText),
         ),
       ],
     );
   }
 
   Widget _buildPeriodeSelector(
-      BuildContext context, ThemeColors palette, Color accent) {
+    BuildContext context,
+    ThemeColors palette,
+    Color accent,
+  ) {
     return _card(
       palette,
       child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 12,
           children: [
-            Icon(Icons.date_range, color: accent, size: 28),
-            const SizedBox(width: 16),
-            Text(
-              'Période :',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: palette.text,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.date_range, color: accent, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  'Période',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 20),
             DropdownButton<String>(
               value: _periode,
-              items: [
+              items: const [
                 'Aujourd\'hui',
                 '7 jours',
                 'Ce mois',
@@ -439,8 +584,20 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
                 'Cette année',
                 'Personnalisé',
               ].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-              onChanged: (v) {
-                setState(() => _periode = v!);
+              onChanged: (v) async {
+                if (v == null) return;
+                setState(() => _periode = v);
+                if (v == 'Personnalisé') {
+                  final picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                    initialDateRange: _customRange,
+                  );
+                  if (picked != null) {
+                    setState(() => _customRange = picked);
+                  }
+                }
                 _loadData();
               },
               style: TextStyle(
@@ -448,26 +605,45 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
                 fontWeight: FontWeight.w600,
               ),
               dropdownColor: palette.isDark ? Colors.grey[900] : Colors.white,
-              underline: Container(),
+              underline: const SizedBox.shrink(),
             ),
-            const Spacer(),
-            ElevatedButton.icon(
+            if (_periode == 'Personnalisé')
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                    initialDateRange: _customRange,
+                  );
+                  if (picked != null) {
+                    setState(() => _customRange = picked);
+                    _loadData();
+                  }
+                },
+                icon: const Icon(Icons.edit_calendar),
+                label: Text(
+                  _customRange == null
+                      ? 'Choisir dates'
+                      : '${DateFormat('dd/MM').format(_customRange!.start)} - ${DateFormat('dd/MM').format(_customRange!.end)}',
+                ),
+              ),
+            OutlinedButton.icon(
               onPressed: () => _exportAsPdf(context),
-              icon: const Icon(Icons.file_download),
-              label: const Text('Exporter PDF'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                padding: const EdgeInsets.all(16),
+              icon: const Icon(Icons.picture_as_pdf),
+              label: const Text('PDF'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: BorderSide(color: Colors.red.withOpacity(0.4)),
               ),
             ),
-            const SizedBox(width: 12),
-            ElevatedButton.icon(
+            OutlinedButton.icon(
               onPressed: () => _exportAsCsv(context),
               icon: const Icon(Icons.table_view),
-              label: const Text('Exporter Excel'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                padding: const EdgeInsets.all(16),
+              label: const Text('Excel'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green,
+                side: BorderSide(color: Colors.green.withOpacity(0.4)),
               ),
             ),
           ],
@@ -477,127 +653,67 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
   }
 
   Widget _buildKpis(ThemeColors palette, Color accent) {
-    return Row(
-      children: [
-        Expanded(
-        child: _kpiCard(
-          'CA Total',
-          _formatCurrency(_caTotal),
-          _growthText(),
-          Icons.trending_up,
-          Colors.green,
-          palette,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _kpiCard(
-            'Panier moyen',
-            _formatCurrency(_panierMoyen),
-            '',
-            Icons.shopping_basket,
-            accent,
-            palette,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _kpiCard(
-            'Taux de marge',
-            '${_tauxMarge.toStringAsFixed(1)}%',
-            '',
-            Icons.pie_chart,
-            Colors.purple,
-            palette,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _kpiCard(
-            'Nombre de ventes',
-            '$_nbVentes',
-            '',
-            Icons.receipt_long,
-            Colors.blue,
-            palette,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _kpiCard(
-    String label,
-    String value,
-    String evolution,
-    IconData icon,
-    Color color,
-    ThemeColors palette,
-  ) {
-    final hasEvolution = evolution.isNotEmpty;
-    final showArrow = evolution.startsWith('+') || evolution.startsWith('-');
-    final isPositive = evolution.startsWith('+');
-    final evolutionColor = showArrow
-        ? (isPositive ? Colors.green : Colors.red)
-        : palette.subText;
-    return _card(
-      palette,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 28),
-                ),
-                const Spacer(),
-                if (hasEvolution)
-                  Row(
-                    children: [
-                      Text(
-                        evolution,
-                        style: TextStyle(
-                          color: evolutionColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (showArrow)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Icon(
-                            isPositive
-                                ? Icons.trending_up
-                                : Icons.trending_down,
-                            color: evolutionColor,
-                          ),
-                        ),
-                    ],
-                  )
-                else
-                  const SizedBox.shrink(),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(label, style: TextStyle(color: palette.subText, fontSize: 14)),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: palette.text,
-              ),
-            ),
-          ],
-        ),
+    final cards = [
+      (
+        title: 'CA Total',
+        value: _formatCurrency(_caTotal),
+        subtitle: _growthText(),
+        icon: Icons.trending_up,
+        color: Colors.green,
       ),
+      (
+        title: 'Panier moyen',
+        value: _formatCurrency(_panierMoyen),
+        subtitle: 'Par vente',
+        icon: Icons.shopping_basket,
+        color: Colors.blue,
+      ),
+      (
+        title: 'Marge brute',
+        value: _formatCurrency(_marge),
+        subtitle: '${_tauxMarge.toStringAsFixed(1)}% du CA',
+        icon: Icons.insights,
+        color: Colors.purple,
+      ),
+      (
+        title: 'Ventes',
+        value: '$_nbVentes',
+        subtitle: 'Transactions',
+        icon: Icons.receipt_long,
+        color: Colors.orange,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final cardWidth = width > 1200
+            ? (width - 48) / 4
+            : width > 800
+            ? (width - 36) / 3
+            : width > 520
+            ? (width - 24) / 2
+            : width;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: cards.map((c) {
+            return SizedBox(
+              width: cardWidth,
+              child: StatsCard(
+                title: c.title,
+                value: c.value,
+                icon: c.icon,
+                color: c.color,
+                subtitle: c.subtitle,
+                textColor: palette.text,
+                subTextColor: palette.subText,
+                cardColor: palette.card,
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
@@ -621,64 +737,85 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
         ),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxValue = _caData.values.reduce((a, b) => a > b ? a : b);
+        final chartHeight = constraints.maxWidth < 700 ? 300.0 : 360.0;
+        final barMaxHeight = chartHeight - 60;
+        final barWidth = constraints.maxWidth < 700 ? 28.0 : 36.0;
+        return Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.show_chart, color: accent, size: 32),
-              const SizedBox(width: 12),
-              Text(
-                'Évolution du CA (2025)',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: palette.text,
+              Row(
+                children: [
+                  Icon(Icons.show_chart, color: accent, size: 32),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Évolution du CA (2025)',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: palette.text,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: chartHeight,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: _caData.entries.map((e) {
+                      final height = maxValue == 0
+                          ? 0.0
+                          : (e.value / maxValue) * barMaxHeight;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                              width: barWidth,
+                              height: height,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [accent, accent.withOpacity(0.6)],
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              e.key,
+                              style: TextStyle(
+                                color: palette.subText,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              NumberFormat.compact().format(e.value),
+                              style: TextStyle(
+                                color: palette.text,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 280,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: _caData.entries.map((e) {
-                final max = _caData.values.reduce((a, b) => a > b ? a : b);
-                final height = max == 0 ? 0.0 : (e.value / max) * 240;
-                return Column(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: height,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [accent, accent.withOpacity(0.6)],
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      e.key,
-                      style: TextStyle(color: palette.subText, fontSize: 12),
-                    ),
-                    Text(
-                      NumberFormat.compact().format(e.value),
-                      style: TextStyle(color: palette.text, fontSize: 11),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -768,9 +905,9 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
         allowedExtensions: ['pdf'],
       );
       if (path == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Export PDF annulé')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Export PDF annulé')));
         return;
       }
       final file = File(path);
@@ -782,9 +919,9 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
       );
     } catch (e) {
       debugPrint('Erreur export PDF reporting : $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('L\'export PDF a échoué : $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('L\'export PDF a échoué : $e')));
     }
   }
 
@@ -827,9 +964,9 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
         allowedExtensions: ['csv'],
       );
       if (path == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Export Excel annulé')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Export Excel annulé')));
         return;
       }
       final file = File(path);
@@ -841,46 +978,185 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
       );
     } catch (e) {
       debugPrint('Erreur export CSV reporting : $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('L\'export Excel a échoué : $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('L\'export Excel a échoué : $e')));
     }
   }
 
   Future<Uint8List> _buildReportPdfBytes() async {
+    final settings = await LocalDatabaseService.instance.getSettings();
     final doc = pw.Document();
+    final accent = PdfColors.teal600;
     final headerStyle = pw.TextStyle(
-      fontSize: 22,
+      fontSize: 20,
+      fontWeight: pw.FontWeight.bold,
+      color: PdfColors.white,
+    );
+    final headerSubStyle = pw.TextStyle(fontSize: 10, color: PdfColors.white);
+    final subStyle = pw.TextStyle(fontSize: 10, color: PdfColors.grey700);
+    final sectionTitle = pw.TextStyle(
+      fontSize: 12,
+      fontWeight: pw.FontWeight.bold,
+      color: PdfColors.grey900,
+    );
+    final kpiValueStyle = pw.TextStyle(
+      fontSize: 14,
+      fontWeight: pw.FontWeight.bold,
+      color: PdfColors.grey900,
+    );
+    final kpiLabelStyle = pw.TextStyle(fontSize: 9, color: PdfColors.grey700);
+    final tableHeader = pw.TextStyle(
+      fontSize: 10,
       fontWeight: pw.FontWeight.bold,
     );
-    final subStyle = pw.TextStyle(fontSize: 12, color: PdfColors.grey800);
-    final tableHeader =
-        pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold);
+    final logo = await _loadPdfLogo(settings.logoPath);
+
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
         build: (context) {
           return [
-            pw.Text('Reporting • $_periode', style: headerStyle),
-            pw.SizedBox(height: 6),
-            pw.Text(
-              'Généré le ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
-              style: subStyle,
+            // Header inspired by ticket
+            pw.Container(
+              padding: const pw.EdgeInsets.all(14),
+              decoration: pw.BoxDecoration(
+                color: accent,
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  if (logo != null)
+                    pw.Container(
+                      width: 48,
+                      height: 48,
+                      margin: const pw.EdgeInsets.only(right: 10),
+                      child: pw.Image(logo, fit: pw.BoxFit.contain),
+                    ),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          settings.pharmacyName.isNotEmpty
+                              ? settings.pharmacyName
+                              : 'Pharmacie',
+                          style: headerStyle,
+                        ),
+                        if (settings.pharmacyAddress.isNotEmpty)
+                          pw.Text(
+                            settings.pharmacyAddress,
+                            style: headerSubStyle,
+                          ),
+                        pw.Row(
+                          children: [
+                            if (settings.pharmacyPhone.isNotEmpty)
+                              pw.Text(
+                                'Tel: ${settings.pharmacyPhone}  ',
+                                style: headerSubStyle,
+                              ),
+                            if (settings.pharmacyEmail.isNotEmpty)
+                              pw.Text(
+                                'Email: ${settings.pharmacyEmail}',
+                                style: headerSubStyle,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'Reporting',
+                        style: headerStyle.copyWith(fontSize: 18),
+                      ),
+                      pw.Text('Periode: $_periode', style: headerSubStyle),
+                      pw.Text(
+                        DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()),
+                        style: headerSubStyle,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            pw.SizedBox(height: 16),
-            pw.Text('KPIs', style: tableHeader),
-            pw.Bullet(text: 'CA total : ${_formatCurrency(_caTotal)}'),
-            pw.Bullet(text: 'Panier moyen : ${_formatCurrency(_panierMoyen)}'),
-            pw.Bullet(text: 'Nombre de ventes : $_nbVentes'),
-            pw.Bullet(text: 'Marge : ${_formatCurrency(_marge)}'),
-            if (_growthLabel.isNotEmpty)
-              pw.Bullet(text: 'Croissance : $_growthLabel'),
-            if (_topProduits.isNotEmpty) ...[
-              pw.SizedBox(height: 12),
-              pw.Text('Top produits', style: tableHeader),
+
+            pw.SizedBox(height: 14),
+
+            // KPI blocks
+            pw.Text('Indicateurs clefs', style: sectionTitle),
+            pw.SizedBox(height: 8),
+            pw.Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _kpiPdfCard(
+                  label: 'CA total',
+                  value: _formatCurrency(_caTotal),
+                  subtitle: _growthLabel,
+                  valueStyle: kpiValueStyle,
+                  labelStyle: kpiLabelStyle,
+                  accent: accent,
+                ),
+                _kpiPdfCard(
+                  label: 'Panier moyen',
+                  value: _formatCurrency(_panierMoyen),
+                  subtitle: 'Par vente',
+                  valueStyle: kpiValueStyle,
+                  labelStyle: kpiLabelStyle,
+                  accent: accent,
+                ),
+                _kpiPdfCard(
+                  label: 'Marge brute',
+                  value: _formatCurrency(_marge),
+                  subtitle: '${_tauxMarge.toStringAsFixed(1)}% du CA',
+                  valueStyle: kpiValueStyle,
+                  labelStyle: kpiLabelStyle,
+                  accent: accent,
+                ),
+                _kpiPdfCard(
+                  label: 'Nombre de ventes',
+                  value: '$_nbVentes',
+                  subtitle: 'Transactions',
+                  valueStyle: kpiValueStyle,
+                  labelStyle: kpiLabelStyle,
+                  accent: accent,
+                ),
+              ],
+            ),
+
+            pw.SizedBox(height: 14),
+
+            if (_caData.isNotEmpty) ...[
+              pw.Text('Ventes par periode', style: sectionTitle),
+              pw.SizedBox(height: 6),
               pw.Table.fromTextArray(
-                headers: ['Produit', 'Quantité', 'CA'],
+                headers: ['Date', 'CA (FCFA)'],
+                data: _caData.entries
+                    .map(
+                      (e) => [
+                        e.key,
+                        NumberFormat('#,###', 'fr_FR').format(e.value),
+                      ],
+                    )
+                    .toList(),
+                headerStyle: tableHeader,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                border: pw.TableBorder.all(color: PdfColors.grey300, width: .5),
+              ),
+              pw.SizedBox(height: 10),
+            ],
+
+            if (_topProduits.isNotEmpty) ...[
+              pw.Text('Top produits', style: sectionTitle),
+              pw.SizedBox(height: 6),
+              pw.Table.fromTextArray(
+                headers: ['Produit', 'Quantite', 'CA (FCFA)'],
                 data: _topProduits
                     .map(
                       (produit) => [
@@ -891,31 +1167,97 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
                     )
                     .toList(),
                 headerStyle: tableHeader,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                cellStyle: const pw.TextStyle(fontSize: 9),
                 cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(
-                  color: PdfColors.grey300,
-                ),
+                border: pw.TableBorder.all(color: PdfColors.grey300, width: .5),
               ),
+              pw.SizedBox(height: 10),
             ],
+
             if (_topVendeurs.isNotEmpty) ...[
-              pw.SizedBox(height: 12),
-              pw.Text('Top vendeurs', style: tableHeader),
+              pw.Text('Top vendeurs', style: sectionTitle),
+              pw.SizedBox(height: 6),
               pw.Table.fromTextArray(
-                headers: ['Vendeur', 'Ventes', 'CA'],
+                headers: ['Vendeur', 'Ventes', 'CA (FCFA)'],
                 data: _topVendeurs
                     .map(
                       (vendeur) => [
-                        vendeur.nom,
+                        vendeur.nom.isNotEmpty
+                            ? vendeur.nom
+                            : 'Vendeur ${vendeur.id}',
                         vendeur.ventes.toString(),
                         NumberFormat('#,###', 'fr_FR').format(vendeur.ca),
                       ],
                     )
                     .toList(),
                 headerStyle: tableHeader,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                cellStyle: const pw.TextStyle(fontSize: 9),
                 cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(
-                  color: PdfColors.grey300,
-                ),
+                border: pw.TableBorder.all(color: PdfColors.grey300, width: .5),
+              ),
+              pw.SizedBox(height: 10),
+            ],
+
+            if (_familles.isNotEmpty) ...[
+              pw.Text('Repartition par famille', style: sectionTitle),
+              pw.SizedBox(height: 6),
+              pw.Column(
+                children: _familles.map((f) {
+                  return pw.Container(
+                    margin: const pw.EdgeInsets.only(bottom: 4),
+                    child: pw.Row(
+                      children: [
+                        pw.Expanded(
+                          flex: 3,
+                          child: pw.Text(
+                            f.famille,
+                            style: const pw.TextStyle(fontSize: 9),
+                          ),
+                        ),
+                        pw.Expanded(
+                          flex: 5,
+                          child: pw.Container(
+                            height: 8,
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.grey200,
+                              borderRadius: pw.BorderRadius.circular(4),
+                            ),
+                            child: pw.Stack(
+                              children: [
+                                pw.Positioned(
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: pw.Container(
+                                    width: 200 * (f.pourcentage / 100),
+                                    decoration: pw.BoxDecoration(
+                                      color: accent,
+                                      borderRadius: pw.BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        pw.SizedBox(width: 8),
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text(
+                            '${f.pourcentage.toStringAsFixed(1)}%',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                            textAlign: pw.TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
             ],
           ];
@@ -923,6 +1265,49 @@ class _ReportingStatsScreenState extends State<ReportingStatsScreen>
       ),
     );
     return doc.save();
+  }
+
+  pw.ImageProvider? _loadPdfLogo(String path) {
+    if (path.isEmpty) return null;
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      final bytes = file.readAsBytesSync();
+      return pw.MemoryImage(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  pw.Widget _kpiPdfCard({
+    required String label,
+    required String value,
+    required String subtitle,
+    required pw.TextStyle valueStyle,
+    required pw.TextStyle labelStyle,
+    required PdfColor accent,
+  }) {
+    return pw.Container(
+      width: 125,
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey50,
+        borderRadius: pw.BorderRadius.circular(8),
+        border: pw.Border.all(color: PdfColors.grey300, width: .6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(label, style: labelStyle),
+          pw.SizedBox(height: 4),
+          pw.Text(value, style: valueStyle),
+          if (subtitle.isNotEmpty) ...[
+            pw.SizedBox(height: 3),
+            pw.Text(subtitle, style: labelStyle.copyWith(color: accent)),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<double> _sumSalesBetween(DateTimeRange range) async {

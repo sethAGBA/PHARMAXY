@@ -11,8 +11,11 @@ import '../app_theme.dart';
 import '../models/app_settings.dart';
 import '../models/caisse_settings.dart';
 import '../models/app_user.dart';
+import '../models/tiers_payant.dart';
+import '../models/marges_settings.dart';
 import '../screens/double_authentication_screen.dart';
 import '../services/auth_service.dart';
+import '../services/license_service.dart';
 import '../services/local_database_service.dart';
 
 class ParametrageScreen extends StatefulWidget {
@@ -66,6 +69,8 @@ class _ParametrageScreenState extends State<ParametrageScreen>
   bool _loadingSettings = true;
   CaisseSettings _caisse = CaisseSettings.defaults();
   bool _loadingCaisse = true;
+  MargesSettings _marges = MargesSettings.defaults();
+  bool _loadingMarges = true;
   late final TextEditingController _logoController = TextEditingController();
   late final TextEditingController _clientFieldController =
       TextEditingController(text: 'Nom / Tel');
@@ -87,46 +92,36 @@ class _ParametrageScreenState extends State<ParametrageScreen>
       TextEditingController();
   late final TextEditingController _pharmacyOrderController =
       TextEditingController();
+  late final TextEditingController _pharmacyWebsiteController =
+      TextEditingController();
+  late final TextEditingController _pharmacyHoursController =
+      TextEditingController();
+  late final TextEditingController _emergencyContactController =
+      TextEditingController();
+  late final TextEditingController _fiscalIdController =
+      TextEditingController();
+  late final TextEditingController _taxDetailsController =
+      TextEditingController();
+  late final TextEditingController _returnPolicyController =
+      TextEditingController();
+  late final TextEditingController _healthAdviceController =
+      TextEditingController();
+  late final TextEditingController _loyaltyMessageController =
+      TextEditingController();
+  late final TextEditingController _ticketLinkController =
+      TextEditingController();
+  late final TextEditingController _ticketFooterController =
+      TextEditingController();
   final FilePicker _filePicker = FilePicker.platform;
 
-  final List<TiersPayant> _tiersPayants = [
-    TiersPayant(
-      nom: 'INAM',
-      type: 'Assurance Maladie',
-      tauxPriseEnCharge: 80,
-      delaiPaiement: 60,
-      actif: true,
-      nbPatients: 1245,
-      montantEnAttente: 8500000,
-    ),
-    TiersPayant(
-      nom: 'CNSS',
-      type: 'Caisse Sociale',
-      tauxPriseEnCharge: 70,
-      delaiPaiement: 45,
-      actif: true,
-      nbPatients: 856,
-      montantEnAttente: 5200000,
-    ),
-    TiersPayant(
-      nom: 'SAHAM Assurance',
-      type: 'Assurance Privée',
-      tauxPriseEnCharge: 90,
-      delaiPaiement: 30,
-      actif: true,
-      nbPatients: 423,
-      montantEnAttente: 3800000,
-    ),
-    TiersPayant(
-      nom: 'NSIA Assurance',
-      type: 'Assurance Privée',
-      tauxPriseEnCharge: 85,
-      delaiPaiement: 30,
-      actif: true,
-      nbPatients: 312,
-      montantEnAttente: 2900000,
-    ),
-  ];
+  final TextEditingController _licenseKeyController = TextEditingController();
+  LicenseStatus? _licenseStatus;
+  bool _licenseLoading = true;
+  bool _allLicensesConsumed = false;
+
+  List<TiersPayant> _tiersPayants = [];
+  bool _loadingTiersPayants = true;
+  String? _tiersPayantsError;
 
   final List<Peripherique> _peripheriques = [
     Peripherique(
@@ -178,6 +173,9 @@ class _ParametrageScreenState extends State<ParametrageScreen>
     _chargerUtilisateurs();
     _chargerSettings();
     _chargerCaisse();
+    _chargerTiersPayants();
+    _chargerMarges();
+    _loadLicense();
   }
 
   @override
@@ -192,7 +190,205 @@ class _ParametrageScreenState extends State<ParametrageScreen>
     _pharmacyPhoneController.dispose();
     _pharmacyEmailController.dispose();
     _pharmacyOrderController.dispose();
+    _pharmacyWebsiteController.dispose();
+    _pharmacyHoursController.dispose();
+    _emergencyContactController.dispose();
+    _fiscalIdController.dispose();
+    _taxDetailsController.dispose();
+    _returnPolicyController.dispose();
+    _healthAdviceController.dispose();
+    _loyaltyMessageController.dispose();
+    _ticketLinkController.dispose();
+    _ticketFooterController.dispose();
+    _licenseKeyController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadLicense() async {
+    final st = await LicenseService.instance.getStatus();
+    final all = await LicenseService.instance.allKeysUsed();
+    if (!mounted) return;
+    setState(() {
+      _licenseStatus = st;
+      _licenseKeyController.text = st.key ?? '';
+      _allLicensesConsumed = all;
+      _licenseLoading = false;
+    });
+  }
+
+  Future<void> _saveLicense() async {
+    final key = _licenseKeyController.text.trim();
+    if (key.isEmpty) {
+      _afficherInfo('Veuillez saisir la clé de licence');
+      return;
+    }
+    try {
+      await LicenseService.instance.saveLicense(key: key);
+      await _loadLicense();
+      _afficherInfo('Licence enregistrée');
+    } catch (e) {
+      _afficherInfo(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _clearLicense() async {
+    final st = await LicenseService.instance.getStatus();
+    final confirmController = TextEditingController();
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Confirmer la suppression'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Saisissez la clé de licence actuelle pour confirmer.\nLa clé restera marquée comme utilisée.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                decoration: const InputDecoration(
+                  labelText: 'Clé de licence',
+                  prefixIcon: Icon(Icons.vpn_key),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final input = LicenseService.normalize(confirmController.text);
+                final current = LicenseService.normalize(st.key ?? '');
+                if (input.isEmpty || input != current) {
+                  Navigator.of(ctx).pop(false);
+                  return;
+                }
+                Navigator.of(ctx).pop(true);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        );
+      },
+    );
+    if (proceed != true) {
+      _afficherInfo('Clé de licence incorrecte');
+      return;
+    }
+    await LicenseService.instance.clearLicense();
+    await _loadLicense();
+    _afficherInfo('Licence supprimée');
+  }
+
+  Future<void> _showLicenseDialog() async {
+    await _loadLicense();
+    if (!mounted) return;
+    final palette = ThemeColors.from(context);
+    final st = _licenseStatus;
+    final keyController = TextEditingController();
+
+    final bool unlocked = _allLicensesConsumed == true;
+    String statusLabel = 'Licence requise';
+    Color statusColor = Colors.orange;
+    if (unlocked) {
+      statusLabel = 'Application débloquée';
+      statusColor = Colors.green;
+    } else if (st?.isActive == true) {
+      statusLabel = 'Licence active • ${st!.daysRemaining}j restants';
+      statusColor = Colors.blue;
+    } else if (st?.hasKey == true) {
+      statusLabel = 'Licence expirée';
+      statusColor = Colors.red;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Licence'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: statusColor.withOpacity(0.25)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.vpn_key, color: statusColor, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          statusLabel,
+                          style: TextStyle(
+                            color: palette.text,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: keyController,
+                  decoration: const InputDecoration(
+                    labelText: 'Clé de licence',
+                    prefixIcon: Icon(Icons.vpn_key),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'La licence est valable 12 mois à partir de la date d’enregistrement.',
+                  style: TextStyle(color: palette.subText, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Fermer'),
+            ),
+            if (st?.hasKey == true)
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  await _clearLicense();
+                },
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Supprimer'),
+              ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                _licenseKeyController.text = keyController.text.trim();
+                await _saveLicense();
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+              icon: const Icon(Icons.save),
+              label: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _chargerSettings() async {
@@ -207,6 +403,16 @@ class _ParametrageScreenState extends State<ParametrageScreen>
       _pharmacyPhoneController.text = settings.pharmacyPhone;
       _pharmacyEmailController.text = settings.pharmacyEmail;
       _pharmacyOrderController.text = settings.pharmacyOrderNumber;
+      _pharmacyWebsiteController.text = settings.pharmacyWebsite;
+      _pharmacyHoursController.text = settings.pharmacyHours;
+      _emergencyContactController.text = settings.emergencyContact;
+      _fiscalIdController.text = settings.fiscalId;
+      _taxDetailsController.text = settings.taxDetails;
+      _returnPolicyController.text = settings.returnPolicy;
+      _healthAdviceController.text = settings.healthAdvice;
+      _loyaltyMessageController.text = settings.loyaltyMessage;
+      _ticketLinkController.text = settings.ticketLink;
+      _ticketFooterController.text = settings.ticketFooter;
       _loadingSettings = false;
     });
   }
@@ -222,6 +428,37 @@ class _ParametrageScreenState extends State<ParametrageScreen>
       _formatController.text = caisse.numberingFormat;
       _clientFieldController.text = caisse.customerField;
       _loadingCaisse = false;
+    });
+  }
+
+  Future<void> _chargerTiersPayants() async {
+    setState(() {
+      _loadingTiersPayants = true;
+      _tiersPayantsError = null;
+    });
+    try {
+      final tiers = await LocalDatabaseService.instance.getTiersPayants();
+      if (!mounted) return;
+      setState(() {
+        _tiersPayants = tiers;
+        _loadingTiersPayants = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingTiersPayants = false;
+        _tiersPayantsError = 'Erreur chargement tiers: $e';
+      });
+    }
+  }
+
+  Future<void> _chargerMarges() async {
+    setState(() => _loadingMarges = true);
+    final marges = await LocalDatabaseService.instance.getMargesSettings();
+    if (!mounted) return;
+    setState(() {
+      _marges = marges;
+      _loadingMarges = false;
     });
   }
 
@@ -312,9 +549,9 @@ class _ParametrageScreenState extends State<ParametrageScreen>
           ),
         ),
         OutlinedButton.icon(
-          onPressed: () => _afficherInfo('Sauvegarde automatique activée'),
+          onPressed: _enregistrerSettings,
           icon: const Icon(Icons.save),
-          label: const Text('SAUVEGARDER'),
+          label: const Text('Enregistrer tous les paramètres'),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           ),
@@ -833,6 +1070,181 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
+                              'Mentions ticket',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: palette.text,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            _controlledInput(
+                              'Contact urgences',
+                              _emergencyContactController,
+                              palette,
+                              hint: '+228 90 00 00 00',
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
+                              'Identifiant fiscal / TVA',
+                              _fiscalIdController,
+                              palette,
+                              hint: 'IFU / N° TVA',
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
+                              'Détails taxes',
+                              _taxDetailsController,
+                              palette,
+                              hint: 'TVA 18%, exonérations, autres frais',
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
+                              'Politique retour / échange',
+                              _returnPolicyController,
+                              palette,
+                              hint: 'Retour sous 7 jours avec ticket',
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
+                              'Conseil santé / hotline',
+                              _healthAdviceController,
+                              palette,
+                              hint: 'Hotline conseil: 80 00 00 00',
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
+                              'Message fidélité / points',
+                              _loyaltyMessageController,
+                              palette,
+                              hint:
+                                  'Points cumulés: 1200 — scannez pour rejoindre',
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
+                              'Lien ticket / SAV',
+                              _ticketLinkController,
+                              palette,
+                              hint: 'https://sav.pharma/ticket/{id}',
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
+                              'Pied de ticket',
+                              _ticketFooterController,
+                              palette,
+                              hint: 'Merci de votre confiance',
+                              maxLines: 2,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _card(
+                      palette,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Licence',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: palette.text,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (_licenseLoading)
+                              const LinearProgressIndicator(minHeight: 3)
+                            else ...[
+                              Builder(
+                                builder: (_) {
+                                  final st = _licenseStatus;
+                                  final unlocked = _allLicensesConsumed == true;
+                                  String label = 'Licence requise';
+                                  Color color = Colors.orange;
+                                  if (unlocked) {
+                                    label = 'Application débloquée';
+                                    color = Colors.green;
+                                  } else if (st?.isActive == true) {
+                                    label =
+                                        'Licence active • ${st!.daysRemaining}j restants';
+                                    color = Colors.blue;
+                                  } else if (st?.hasKey == true) {
+                                    label = 'Licence expirée';
+                                    color = Colors.red;
+                                  }
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: color.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: color.withOpacity(0.25),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.vpn_key,
+                                          color: color,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            label,
+                                            style: TextStyle(
+                                              color: palette.text,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: ElevatedButton.icon(
+                                  onPressed: _showLicenseDialog,
+                                  icon: const Icon(Icons.settings),
+                                  label: const Text('GÉRER LA LICENCE'),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'La clé est masquée ici. Utilisez “Gérer la licence” pour activer/metre à jour.',
+                                style: TextStyle(
+                                  color: palette.subText,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _card(
+                      palette,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
                               'Numérotation & ticket',
                               style: TextStyle(
                                 fontSize: 18,
@@ -1005,7 +1417,7 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                   ),
                 ),
                 ElevatedButton.icon(
-                  onPressed: () => _afficherInfo('Ajout de tiers payant'),
+                  onPressed: _ouvrirDialogTiersPayant,
                   icon: const Icon(Icons.add),
                   label: const Text('NOUVEAU TIERS'),
                   style: ElevatedButton.styleFrom(
@@ -1022,20 +1434,47 @@ class _ParametrageScreenState extends State<ParametrageScreen>
           ),
         ),
         const SizedBox(height: 16),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _tiersPayants.length,
-            itemBuilder: (context, index) {
-              return _carteTiersPayant(_tiersPayants[index], palette, accent);
-            },
+        if (_loadingTiersPayants)
+          const Expanded(child: Center(child: CircularProgressIndicator()))
+        else if (_tiersPayantsError != null)
+          Expanded(
+            child: Center(
+              child: Text(
+                _tiersPayantsError!,
+                style: TextStyle(color: palette.subText),
+              ),
+            ),
+          )
+        else if (_tiersPayants.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                'Aucun tiers payant enregistré',
+                style: TextStyle(color: palette.subText),
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              itemCount: _tiersPayants.length,
+              itemBuilder: (context, index) {
+                return _carteTiersPayant(
+                  _tiersPayants[index],
+                  index,
+                  palette,
+                  accent,
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }
 
   Widget _carteTiersPayant(
     TiersPayant tiers,
+    int index,
     ThemeColors palette,
     Color accent,
   ) {
@@ -1087,13 +1526,20 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                   ),
                   Switch(
                     value: tiers.actif,
-                    onChanged: (value) {
-                      setState(() => tiers.actif = value);
+                    onChanged: (value) async {
+                      final updated = tiers.copyWith(actif: value);
+                      await LocalDatabaseService.instance.upsertTiersPayant(
+                        updated,
+                      );
+                      if (!mounted) return;
+                      setState(() {
+                        _tiersPayants[index] = updated;
+                      });
                     },
                   ),
                   const SizedBox(width: 12),
                   IconButton(
-                    onPressed: () => _afficherInfo('Modifier ${tiers.nom}'),
+                    onPressed: () => _ouvrirDialogTiersPayant(existing: tiers),
                     icon: const Icon(Icons.edit),
                   ),
                 ],
@@ -1176,6 +1622,16 @@ class _ParametrageScreenState extends State<ParametrageScreen>
 
   // ============= MARGES =============
   Widget _buildMarges(ThemeColors palette, Color accent) {
+    if (_loadingMarges) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final colorsById = <String, Color>{
+      'generiques': Colors.green,
+      'marque': Colors.blue,
+      'parapharmacie': Colors.orange,
+      'cosmetiques': Colors.purple,
+      'materiel': Colors.teal,
+    };
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1217,45 +1673,13 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                     ),
                   ),
                   const SizedBox(height: 20),
-                  _margeCategorie(
-                    'Médicaments génériques',
-                    15,
-                    25,
-                    Colors.green,
-                    palette,
-                  ),
-                  const SizedBox(height: 16),
-                  _margeCategorie(
-                    'Médicaments de marque',
-                    20,
-                    35,
-                    Colors.blue,
-                    palette,
-                  ),
-                  const SizedBox(height: 16),
-                  _margeCategorie(
-                    'Parapharmacie',
-                    30,
-                    50,
-                    Colors.orange,
-                    palette,
-                  ),
-                  const SizedBox(height: 16),
-                  _margeCategorie(
-                    'Cosmétiques',
-                    35,
-                    60,
-                    Colors.purple,
-                    palette,
-                  ),
-                  const SizedBox(height: 16),
-                  _margeCategorie(
-                    'Matériel médical',
-                    25,
-                    40,
-                    Colors.teal,
-                    palette,
-                  ),
+                  ..._marges.categories.map((cat) {
+                    final color = colorsById[cat.id] ?? accent;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _margeCategorie(cat, color, palette),
+                    );
+                  }),
                 ],
               ),
             ),
@@ -1266,9 +1690,7 @@ class _ParametrageScreenState extends State<ParametrageScreen>
   }
 
   Widget _margeCategorie(
-    String nom,
-    int margeMin,
-    int margeMax,
+    MargeCategorie categorie,
     Color color,
     ThemeColors palette,
   ) {
@@ -1295,7 +1717,7 @@ class _ParametrageScreenState extends State<ParametrageScreen>
           Expanded(
             flex: 2,
             child: Text(
-              nom,
+              categorie.nom,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -1313,7 +1735,7 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$margeMin%',
+                  '${categorie.margeMin}%',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1333,7 +1755,7 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$margeMax%',
+                  '${categorie.margeMax}%',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1344,7 +1766,7 @@ class _ParametrageScreenState extends State<ParametrageScreen>
             ),
           ),
           IconButton(
-            onPressed: () => _afficherInfo('Modifier les marges de $nom'),
+            onPressed: () => _ouvrirDialogMargeCategorie(categorie),
             icon: const Icon(Icons.edit, size: 20),
             tooltip: 'Modifier',
           ),
@@ -1619,6 +2041,13 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                             ),
                             const SizedBox(height: 12),
                             _controlledInput(
+                              'Site web / Réseaux',
+                              _pharmacyWebsiteController,
+                              palette,
+                              hint: 'pharmacie.cm / @pharmacie',
+                            ),
+                            const SizedBox(height: 12),
+                            _controlledInput(
                               'N° Ordre',
                               _pharmacyOrderController,
                               palette,
@@ -1640,23 +2069,6 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                             ),
                             const SizedBox(height: 12),
                             _logoPicker(palette),
-                            const SizedBox(height: 16),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: ElevatedButton.icon(
-                                onPressed: _enregistrerSettings,
-                                icon: const Icon(Icons.save),
-                                label: const Text('Enregistrer'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: accent,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -1678,15 +2090,14 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                               ),
                             ),
                             const SizedBox(height: 20),
-                            _inputOption(
-                              'Lundi - Vendredi',
-                              '08:00 - 19:00',
+                            _controlledInput(
+                              'Horaires affichés sur ticket',
+                              _pharmacyHoursController,
                               palette,
+                              hint:
+                                  'Lun-Sam 08h00-19h30 (Garde dimanches alternés)',
+                              maxLines: 2,
                             ),
-                            const SizedBox(height: 12),
-                            _inputOption('Samedi', '08:00 - 18:00', palette),
-                            const SizedBox(height: 12),
-                            _inputOption('Dimanche', '09:00 - 13:00', palette),
                           ],
                         ),
                       ),
@@ -1835,10 +2246,14 @@ class _ParametrageScreenState extends State<ParametrageScreen>
                                   ),
                                 ),
                                 ElevatedButton.icon(
-                                  onPressed: () =>
-                                      _afficherInfo('Sauvegarde en cours...'),
-                                  icon: const Icon(Icons.backup, size: 18),
-                                  label: const Text('SAUVEGARDER'),
+                                  onPressed: () => _afficherInfo(
+                                    'Sauvegarde cloud en cours...',
+                                  ),
+                                  icon: const Icon(
+                                    Icons.cloud_upload,
+                                    size: 18,
+                                  ),
+                                  label: const Text('SAUVEGARDER SUR LE CLOUD'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.teal,
                                     foregroundColor: Colors.white,
@@ -1971,56 +2386,12 @@ class _ParametrageScreenState extends State<ParametrageScreen>
     );
   }
 
-  Widget _inputOption(String label, String value, ThemeColors palette) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: palette.subText,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: TextEditingController(text: value),
-          style: TextStyle(fontSize: 15, color: palette.text),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: palette.isDark ? Colors.grey[850] : Colors.grey[50],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: palette.isDark ? Colors.grey[700]! : Colors.grey[300]!,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: palette.isDark ? Colors.grey[700]! : Colors.grey[300]!,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _controlledInput(
     String label,
     TextEditingController controller,
     ThemeColors palette, {
     String? hint,
+    int maxLines = 1,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2036,6 +2407,7 @@ class _ParametrageScreenState extends State<ParametrageScreen>
         const SizedBox(height: 8),
         TextField(
           controller: controller,
+          maxLines: maxLines,
           style: TextStyle(fontSize: 15, color: palette.text),
           decoration: InputDecoration(
             hintText: hint,
@@ -2313,6 +2685,219 @@ class _ParametrageScreenState extends State<ParametrageScreen>
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _ouvrirDialogTiersPayant({TiersPayant? existing}) async {
+    final formKey = GlobalKey<FormState>();
+    final nomCtrl = TextEditingController(text: existing?.nom ?? '');
+    final typeCtrl = TextEditingController(text: existing?.type ?? '');
+    final tauxCtrl = TextEditingController(
+      text: existing != null ? existing.tauxPriseEnCharge.toString() : '',
+    );
+    final delaiCtrl = TextEditingController(
+      text: existing != null ? existing.delaiPaiement.toString() : '',
+    );
+    bool actif = existing?.actif ?? true;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final palette = ThemeColors.from(context);
+        return AlertDialog(
+          title: Text(
+            existing == null ? 'Nouveau tiers payant' : 'Modifier tiers',
+          ),
+          content: Form(
+            key: formKey,
+            child: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nomCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom organisme',
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Requis' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: typeCtrl,
+                    decoration: const InputDecoration(labelText: 'Type'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Requis' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: tauxCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Taux prise en charge (%)',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      final parsed = int.tryParse(v ?? '');
+                      if (parsed == null) return 'Nombre invalide';
+                      if (parsed < 0 || parsed > 100) return '0-100';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: delaiCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Délai paiement (jours)',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => int.tryParse(v ?? '') == null
+                        ? 'Nombre invalide'
+                        : null,
+                  ),
+                  const SizedBox(height: 8),
+                  StatefulBuilder(
+                    builder: (context, setLocal) {
+                      return SwitchListTile(
+                        title: Text(
+                          'Actif',
+                          style: TextStyle(color: palette.text),
+                        ),
+                        value: actif,
+                        onChanged: (val) => setLocal(() => actif = val),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() != true) return;
+                Navigator.pop(context, true);
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+    final now = DateTime.now();
+    final tiers =
+        (existing ??
+                TiersPayant(
+                  id: 'TP-${now.microsecondsSinceEpoch}',
+                  nom: '',
+                  type: '',
+                  tauxPriseEnCharge: 0,
+                  delaiPaiement: 0,
+                  actif: true,
+                  nbPatients: 0,
+                  montantEnAttente: 0,
+                  createdAt: now,
+                ))
+            .copyWith(
+              nom: nomCtrl.text.trim(),
+              type: typeCtrl.text.trim(),
+              tauxPriseEnCharge: int.tryParse(tauxCtrl.text.trim()) ?? 0,
+              delaiPaiement: int.tryParse(delaiCtrl.text.trim()) ?? 0,
+              actif: actif,
+            );
+
+    await LocalDatabaseService.instance.upsertTiersPayant(tiers);
+    await _chargerTiersPayants();
+    _afficherInfo(
+      existing == null ? 'Tiers payant ajouté' : 'Tiers payant mis à jour',
+    );
+  }
+
+  Future<void> _ouvrirDialogMargeCategorie(MargeCategorie categorie) async {
+    final formKey = GlobalKey<FormState>();
+    final minCtrl = TextEditingController(text: categorie.margeMin.toString());
+    final maxCtrl = TextEditingController(text: categorie.margeMax.toString());
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Modifier marges: ${categorie.nom}'),
+          content: Form(
+            key: formKey,
+            child: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: minCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Marge min (%)',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      final val = int.tryParse(v ?? '');
+                      if (val == null) return 'Nombre invalide';
+                      if (val < 0 || val > 100) return '0-100';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: maxCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Marge max (%)',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      final val = int.tryParse(v ?? '');
+                      if (val == null) return 'Nombre invalide';
+                      if (val < 0 || val > 100) return '0-100';
+                      final minVal = int.tryParse(minCtrl.text) ?? 0;
+                      if (val < minVal) return '≥ marge min';
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() != true) return;
+                Navigator.pop(context, true);
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+    final updated = categorie.copyWith(
+      margeMin: int.tryParse(minCtrl.text.trim()) ?? categorie.margeMin,
+      margeMax: int.tryParse(maxCtrl.text.trim()) ?? categorie.margeMax,
+    );
+    final newCats = _marges.categories
+        .map((c) => c.id == updated.id ? updated : c)
+        .toList();
+    final newSettings = _marges.copyWith(categories: newCats);
+    await LocalDatabaseService.instance.saveMargesSettings(newSettings);
+    if (!mounted) return;
+    setState(() => _marges = newSettings);
+    _afficherInfo('Marges mises à jour');
   }
 
   Future<void> _ouvrirDialogUtilisateur({AppUser? user}) async {
@@ -2646,6 +3231,16 @@ class _ParametrageScreenState extends State<ParametrageScreen>
       pharmacyPhone: _pharmacyPhoneController.text.trim(),
       pharmacyEmail: _pharmacyEmailController.text.trim(),
       pharmacyOrderNumber: _pharmacyOrderController.text.trim(),
+      pharmacyWebsite: _pharmacyWebsiteController.text.trim(),
+      pharmacyHours: _pharmacyHoursController.text.trim(),
+      emergencyContact: _emergencyContactController.text.trim(),
+      fiscalId: _fiscalIdController.text.trim(),
+      taxDetails: _taxDetailsController.text.trim(),
+      returnPolicy: _returnPolicyController.text.trim(),
+      healthAdvice: _healthAdviceController.text.trim(),
+      loyaltyMessage: _loyaltyMessageController.text.trim(),
+      ticketLink: _ticketLinkController.text.trim(),
+      ticketFooter: _ticketFooterController.text.trim(),
     );
     await LocalDatabaseService.instance.saveSettings(updated);
     await _chargerSettings();
@@ -2741,8 +3336,10 @@ class _TwoFactorSetupDialogState extends State<TwoFactorSetupDialog> {
       _isVerifying = true;
       _error = null;
     });
-    final verified =
-        AuthService.instance.verifyTwoFactorCode(widget.secret, code);
+    final verified = AuthService.instance.verifyTwoFactorCode(
+      widget.secret,
+      code,
+    );
     setState(() => _isVerifying = false);
     if (!verified) {
       setState(() => _error = 'Code invalide');
@@ -2825,26 +3422,6 @@ class _TwoFactorSetupDialogState extends State<TwoFactorSetupDialog> {
       ],
     );
   }
-}
-
-class TiersPayant {
-  final String nom;
-  final String type;
-  final int tauxPriseEnCharge;
-  final int delaiPaiement;
-  bool actif;
-  final int nbPatients;
-  final int montantEnAttente;
-
-  TiersPayant({
-    required this.nom,
-    required this.type,
-    required this.tauxPriseEnCharge,
-    required this.delaiPaiement,
-    required this.actif,
-    required this.nbPatients,
-    required this.montantEnAttente,
-  });
 }
 
 class Peripherique {

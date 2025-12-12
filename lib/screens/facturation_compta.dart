@@ -15,6 +15,7 @@ import '../app_theme.dart';
 import '../models/app_settings.dart';
 import '../models/sale_models.dart';
 import '../services/ticket_service.dart';
+import '../widgets/stats_card.dart';
 
 class FacturationComptaScreen extends StatefulWidget {
   const FacturationComptaScreen({super.key});
@@ -1119,6 +1120,16 @@ class _FacturationComptaScreenState extends State<FacturationComptaScreen>
         pharmacyPhone: _settings.pharmacyPhone,
         pharmacyEmail: _settings.pharmacyEmail,
         pharmacyOrderNumber: _settings.pharmacyOrderNumber,
+        pharmacyWebsite: _settings.pharmacyWebsite,
+        pharmacyHours: _settings.pharmacyHours,
+        emergencyContact: _settings.emergencyContact,
+        fiscalId: _settings.fiscalId,
+        taxDetails: _settings.taxDetails,
+        returnPolicy: _settings.returnPolicy,
+        healthAdvice: _settings.healthAdvice,
+        loyaltyMessage: _settings.loyaltyMessage,
+        ticketLink: _settings.ticketLink,
+        footerMessage: _settings.ticketFooter,
       );
       await Printing.layoutPdf(onLayout: (_) => bytes);
     } catch (e) {
@@ -1149,6 +1160,16 @@ class _FacturationComptaScreenState extends State<FacturationComptaScreen>
         pharmacyPhone: _settings.pharmacyPhone,
         pharmacyEmail: _settings.pharmacyEmail,
         pharmacyOrderNumber: _settings.pharmacyOrderNumber,
+        pharmacyWebsite: _settings.pharmacyWebsite,
+        pharmacyHours: _settings.pharmacyHours,
+        emergencyContact: _settings.emergencyContact,
+        fiscalId: _settings.fiscalId,
+        taxDetails: _settings.taxDetails,
+        returnPolicy: _settings.returnPolicy,
+        healthAdvice: _settings.healthAdvice,
+        loyaltyMessage: _settings.loyaltyMessage,
+        ticketLink: _settings.ticketLink,
+        footerMessage: _settings.ticketFooter,
       );
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final filePath = p.join(directory, 'ticket_${vente.id}_$timestamp.pdf');
@@ -1957,33 +1978,317 @@ class _FacturationComptaScreenState extends State<FacturationComptaScreen>
   }
 
   Widget _buildStatistiques(ThemeColors palette, Color accent) {
-    return _card(
-      palette,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.bar_chart,
-              size: 80,
-              color: palette.subText.withOpacity(0.3),
+    final currency = _settings.currency.isNotEmpty
+        ? _settings.currency
+        : 'FCFA';
+    final formatter = NumberFormat('#,###', 'fr_FR');
+    final totalVentes = _totalVentes.toDouble();
+    final totalAvoirs = _totalAvoirs.toDouble();
+    final caNet = _caNet.toDouble();
+    final panierMoyen = _nbTransactions == 0 ? 0 : caNet / _nbTransactions;
+
+    final kpis = [
+      (
+        title: 'CA ventes',
+        value: '${formatter.format(totalVentes)} $currency',
+        subtitle: _selectedPeriode,
+        icon: Icons.trending_up,
+        color: Colors.green,
+      ),
+      (
+        title: 'Avoirs / retours',
+        value: '${formatter.format(totalAvoirs)} $currency',
+        subtitle: '${_journal.where((v) => v.montant < 0).length} retours',
+        icon: Icons.undo,
+        color: Colors.redAccent,
+      ),
+      (
+        title: 'CA net',
+        value: '${formatter.format(caNet)} $currency',
+        subtitle: 'Après avoirs',
+        icon: Icons.account_balance_wallet,
+        color: Colors.teal,
+      ),
+      (
+        title: 'Transactions',
+        value: '$_nbTransactions',
+        subtitle: 'Ventes/avoirs',
+        icon: Icons.receipt_long,
+        color: Colors.orange,
+      ),
+      (
+        title: 'Panier moyen',
+        value: '${formatter.format(panierMoyen)} $currency',
+        subtitle: 'Par vente',
+        icon: Icons.shopping_basket,
+        color: Colors.indigo,
+      ),
+      (
+        title: 'Factures payées',
+        value: '${formatter.format(_facturesPayees)} $currency',
+        subtitle:
+            '${_factures.where((f) => f.statut == 'Payée').length} factures',
+        icon: Icons.verified,
+        color: Colors.blue,
+      ),
+      (
+        title: 'Factures en attente',
+        value: '${formatter.format(_facturesEnAttente)} $currency',
+        subtitle:
+            '${_factures.where((f) => f.statut == 'En attente').length} factures',
+        icon: Icons.pending_actions,
+        color: Colors.purple,
+      ),
+    ];
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Statistiques',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: palette.text,
             ),
-            const SizedBox(height: 24),
-            Text(
-              'Statistiques détaillées',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: palette.text,
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final cardWidth = width > 1200
+                  ? (width - 36) / 3
+                  : width > 800
+                  ? (width - 24) / 2
+                  : width;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: kpis.map((kpi) {
+                  return SizedBox(
+                    width: cardWidth,
+                    child: StatsCard(
+                      title: kpi.title,
+                      value: kpi.value,
+                      icon: kpi.icon,
+                      color: kpi.color,
+                      subtitle: kpi.subtitle,
+                      textColor: palette.text,
+                      subTextColor: palette.subText,
+                      cardColor: palette.card,
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+          _card(
+            palette,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.pie_chart, color: accent),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Ventilation des paiements',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: palette.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_ventilationModes.isEmpty)
+                    Text(
+                      'Aucune vente sur la période',
+                      style: TextStyle(color: palette.subText),
+                    )
+                  else
+                    ..._ventilationModes.entries.map((e) {
+                      final mode = e.key;
+                      final montant = e.value;
+                      final part = totalVentes == 0
+                          ? 0.0
+                          : montant / totalVentes;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                mode,
+                                style: TextStyle(color: palette.text),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 5,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: LinearProgressIndicator(
+                                  value: part.clamp(0.0, 1.0),
+                                  minHeight: 10,
+                                  backgroundColor: palette.divider,
+                                  valueColor: AlwaysStoppedAnimation(accent),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 110,
+                              child: Text(
+                                '${formatter.format(montant)} $currency',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: palette.text,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Fonctionnalité à venir',
-              style: TextStyle(fontSize: 16, color: palette.subText),
+          ),
+          const SizedBox(height: 20),
+          _card(
+            palette,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.person, color: accent),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Ventes par vendeur',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: palette.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Builder(
+                    builder: (context) {
+                      final ventesVendeur = <String, List<VenteJournal>>{};
+                      for (final v in _journal.where((j) {
+                        if (j.montant <= 0) return false;
+                        return !j.statut.toLowerCase().contains('annul');
+                      })) {
+                        ventesVendeur.putIfAbsent(v.vendeur, () => []).add(v);
+                      }
+                      if (ventesVendeur.isEmpty) {
+                        return Text(
+                          'Aucune vente sur la période',
+                          style: TextStyle(color: palette.subText),
+                        );
+                      }
+                      final entries =
+                          ventesVendeur.entries.map((e) {
+                            final ca = e.value.fold<int>(
+                              0,
+                              (sum, v) => sum + v.montant,
+                            );
+                            return MapEntry(
+                              e.key.isEmpty ? 'Vendeur inconnu' : e.key,
+                              {'ca': ca, 'ventes': e.value.length},
+                            );
+                          }).toList()..sort(
+                            (a, b) => (b.value['ca'] as int).compareTo(
+                              a.value['ca'] as int,
+                            ),
+                          );
+
+                      return Column(
+                        children: entries.map((e) {
+                          final vendeur = e.key;
+                          final ca = e.value['ca'] as int;
+                          final nb = e.value['ventes'] as int;
+                          final part = totalVentes == 0
+                              ? 0.0
+                              : ca / totalVentes;
+                          final panier = nb == 0 ? 0 : ca / nb;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        vendeur,
+                                        style: TextStyle(
+                                          color: palette.text,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        '$nb ventes • ${formatter.format(panier)} $currency/vente',
+                                        style: TextStyle(
+                                          color: palette.subText,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 5,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: LinearProgressIndicator(
+                                      value: part.clamp(0.0, 1.0),
+                                      minHeight: 10,
+                                      backgroundColor: palette.divider,
+                                      valueColor: AlwaysStoppedAnimation(
+                                        accent,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 110,
+                                  child: Text(
+                                    '${formatter.format(ca)} $currency',
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      color: palette.text,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

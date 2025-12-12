@@ -8,6 +8,7 @@ import '../models/sale_models.dart';
 import '../services/local_database_service.dart';
 import '../services/product_service.dart';
 import '../services/sales_service.dart';
+import '../services/license_service.dart';
 import '../widgets/sales_chart_card.dart';
 import '../widgets/quick_actions.dart';
 import '../widgets/recent_activity.dart';
@@ -29,6 +30,12 @@ class _DashboardHomeState extends State<DashboardHome>
   List<FlSpot> _salesSpots = [];
   List<String> _salesLabels = [];
   List<SaleRecord> _recentSales = [];
+  String _pharmacyName = '';
+  String _licensePillText = 'Système Actif';
+  List<Color> _licensePillGradient = const [
+    Color(0xFF10B981),
+    Color(0xFF34D399),
+  ];
 
   @override
   void initState() {
@@ -134,8 +141,8 @@ class _DashboardHomeState extends State<DashboardHome>
                 ],
               ),
               clipBehavior: Clip.hardEdge,
-                // Reflect the login screen’s hero image inside the dashboard header.
-                child: Image.asset(
+              // Reflect the login screen’s hero image inside the dashboard header.
+              child: Image.asset(
                 'assets/images/pharmacy_icon.jpg',
                 fit: BoxFit.cover,
               ),
@@ -145,7 +152,9 @@ class _DashboardHomeState extends State<DashboardHome>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Tableau de Bord Pharmacie',
+                  _pharmacyName.isNotEmpty
+                      ? 'Tableau de bord Pharmacie $_pharmacyName'
+                      : 'Tableau de bord Pharmacie',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
@@ -164,13 +173,11 @@ class _DashboardHomeState extends State<DashboardHome>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF10B981), Color(0xFF34D399)],
-            ),
+            gradient: LinearGradient(colors: _licensePillGradient),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.green.withOpacity(0.3),
+                color: _licensePillGradient.first.withOpacity(0.3),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               ),
@@ -178,12 +185,12 @@ class _DashboardHomeState extends State<DashboardHome>
           ),
           child: Row(
             children: [
-              Icon(Icons.circle, color: palette.text, size: 10),
+              const Icon(Icons.vpn_key_rounded, color: Colors.white, size: 16),
               const SizedBox(width: 8),
               Text(
-                'Système Actif',
+                _licensePillText,
                 style: TextStyle(
-                  color: palette.text,
+                  color: Colors.white,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
@@ -279,6 +286,23 @@ class _DashboardHomeState extends State<DashboardHome>
 
   Future<void> _loadMetrics() async {
     try {
+      await LocalDatabaseService.instance.init();
+      final settings = await LocalDatabaseService.instance.getSettings();
+      _pharmacyName = settings.pharmacyName.trim();
+
+      final licenseAllUsed = await LicenseService.instance.allKeysUsed();
+      final licenseStatus = await LicenseService.instance.getStatus();
+      if (licenseAllUsed) {
+        _licensePillText = 'Application débloquée';
+        _licensePillGradient = const [Color(0xFF10B981), Color(0xFF34D399)];
+      } else if (licenseStatus.isActive) {
+        _licensePillText = 'Licence • ${licenseStatus.daysRemaining}j restants';
+        _licensePillGradient = const [Color(0xFF3B82F6), Color(0xFF60A5FA)];
+      } else {
+        _licensePillText = 'Licence requise';
+        _licensePillGradient = const [Color(0xFFF59E0B), Color(0xFFFBBF24)];
+      }
+
       // Products / stock
       final entries = await ProductService.instance.fetchStockEntries();
       _medsCount = entries.length;

@@ -34,6 +34,9 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
   late TextEditingController _dobController;
   late TextEditingController _allergiesController;
   late TextEditingController _contreIndicationsController;
+  DateTime? _selectedDob;
+  String? _editDobPatientId;
+  String? _editPatientId;
   bool _showRegistrationForm = false;
   bool _isEditMode = false;
 
@@ -96,6 +99,101 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     super.dispose();
   }
 
+  void _resetFormState() {
+    _nameController.clear();
+    _phoneController.clear();
+    _emailController.clear();
+    _mutuelleController.clear();
+    _nirController.clear();
+    _dobController.clear();
+    _allergiesController.clear();
+    _contreIndicationsController.clear();
+    _selectedDob = null;
+    _editDobPatientId = null;
+  }
+
+  Future<void> _pickDob(ThemeColors palette) async {
+    final initial =
+        _selectedDob ??
+        (() {
+          final raw = _dobController.text.trim();
+          if (raw.isEmpty) return DateTime(1990, 1, 1);
+          try {
+            return DateTime.parse(raw);
+          } catch (_) {
+            try {
+              return DateFormat('dd/MM/yyyy').parseStrict(raw);
+            } catch (_) {
+              return DateTime(1990, 1, 1);
+            }
+          }
+        })();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      helpText: 'Sélectionner la date de naissance',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: palette.isDark
+                ? const ColorScheme.dark(primary: Colors.teal)
+                : const ColorScheme.light(primary: Colors.teal),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null) return;
+    setState(() {
+      _selectedDob = picked;
+      _dobController.text = DateFormat('dd/MM/yyyy').format(picked);
+    });
+  }
+
+  String _dobIsoForSave() {
+    if (_selectedDob != null) {
+      final d = _selectedDob!;
+      return DateTime(d.year, d.month, d.day).toIso8601String();
+    }
+    return _dobController.text.trim();
+  }
+
+  Future<void> _loadDobForPatient(String patientId) async {
+    try {
+      await LocalDatabaseService.instance.init();
+      final db = LocalDatabaseService.instance.db;
+      final rows = await db.query(
+        'patients',
+        columns: ['date_of_birth'],
+        where: 'id = ?',
+        whereArgs: [patientId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final raw = (rows.first['date_of_birth'] as String?) ?? '';
+      if (!mounted) return;
+      DateTime? parsed;
+      if (raw.isNotEmpty) {
+        try {
+          parsed = DateTime.parse(raw);
+        } catch (_) {
+          try {
+            parsed = DateFormat('dd/MM/yyyy').parseStrict(raw);
+          } catch (_) {}
+        }
+      }
+      setState(() {
+        _editDobPatientId = patientId;
+        _selectedDob = parsed;
+        _dobController.text = parsed != null
+            ? DateFormat('dd/MM/yyyy').format(parsed)
+            : raw;
+      });
+    } catch (_) {}
+  }
+
   List<Patient> get _filteredPatients {
     final query = _searchController.text.toLowerCase();
     return _patients.where((p) {
@@ -125,9 +223,12 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 Expanded(child: _buildSearchBar(palette)),
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: () => setState(
-                    () => _showRegistrationForm = !_showRegistrationForm,
-                  ),
+                  onPressed: () => setState(() {
+                    _showRegistrationForm = !_showRegistrationForm;
+                    if (!_showRegistrationForm) {
+                      _resetFormState();
+                    }
+                  }),
                   icon: const Icon(Icons.person_add),
                   label: const Text('Enregistrer'),
                   style: ElevatedButton.styleFrom(
@@ -296,6 +397,9 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                       'Date de naissance',
                       _dobController,
                       palette,
+                      readOnly: true,
+                      onTap: () => _pickDob(palette),
+                      suffixIcon: const Icon(Icons.calendar_month),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -324,20 +428,44 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                   const SizedBox(width: 12),
                   Padding(
                     padding: const EdgeInsets.only(top: 24),
-                    child: ElevatedButton.icon(
-                      onPressed: _registerPatient,
-                      icon: const Icon(Icons.check, size: 20),
-                      label: const Text('Enregistrer'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _registerPatient,
+                          icon: const Icon(Icons.check, size: 20),
+                          label: const Text('Enregistrer'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () => setState(() {
+                            _showRegistrationForm = false;
+                            _resetFormState();
+                          }),
+                          icon: const Icon(Icons.close, size: 20),
+                          label: const Text('Annuler'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ],
@@ -352,8 +480,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
   Widget _buildFormField(
     String label,
     TextEditingController controller,
-    ThemeColors palette,
-  ) {
+    ThemeColors palette, {
+    bool readOnly = false,
+    VoidCallback? onTap,
+    Widget? suffixIcon,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -368,7 +499,10 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
         const SizedBox(height: 6),
         TextField(
           controller: controller,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
+            suffixIcon: suffixIcon,
             filled: true,
             fillColor: palette.isDark ? Colors.grey[800] : Colors.grey[200],
             border: OutlineInputBorder(
@@ -391,7 +525,7 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     final email = _emailController.text.trim();
     final mutuelle = _mutuelleController.text.trim();
     final nir = _nirController.text.trim();
-    final dob = _dobController.text.trim();
+    final dob = _dobIsoForSave();
     final allergies = _allergiesController.text.trim();
     final contreIndications = _contreIndicationsController.text.trim();
 
@@ -423,14 +557,7 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      _nameController.clear();
-      _phoneController.clear();
-      _emailController.clear();
-      _mutuelleController.clear();
-      _nirController.clear();
-      _dobController.clear();
-      _allergiesController.clear();
-      _contreIndicationsController.clear();
+      _resetFormState();
       setState(() => _showRegistrationForm = false);
       await _loadPatients();
 
@@ -837,13 +964,22 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
   }
 
   Widget _buildEditPatientForm(Patient patient, ThemeColors palette) {
-    _nameController.text = patient.nom;
-    _phoneController.text = patient.telephone;
-    _emailController.text = patient.email;
-    _mutuelleController.text = patient.mutuelle;
-    _nirController.text = patient.nir;
-    _allergiesController.text = patient.allergies;
-    _contreIndicationsController.text = patient.contreIndications;
+    if (_editPatientId != patient.id) {
+      _editPatientId = patient.id;
+      _nameController.text = patient.nom;
+      _phoneController.text = patient.telephone;
+      _emailController.text = patient.email;
+      _mutuelleController.text = patient.mutuelle;
+      _nirController.text = patient.nir;
+      _allergiesController.text = patient.allergies;
+      _contreIndicationsController.text = patient.contreIndications;
+      _selectedDob = null;
+      _editDobPatientId = null;
+      _dobController.clear();
+    }
+    if (patient.id != null && _editDobPatientId != patient.id) {
+      _loadDobForPatient(patient.id!);
+    }
 
     return _card(
       palette,
@@ -891,11 +1027,22 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
               ],
             ),
             const SizedBox(height: 16),
-            // Row 2: NIR, Allergies
+            // Row 2: NIR, Date de naissance, Allergies
             Row(
               children: [
                 Expanded(
                   child: _buildFormField('NIR', _nirController, palette),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildFormField(
+                    'Date de naissance',
+                    _dobController,
+                    palette,
+                    readOnly: true,
+                    onTap: () => _pickDob(palette),
+                    suffixIcon: const Icon(Icons.calendar_month),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -943,7 +1090,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
-                  onPressed: () => setState(() => _isEditMode = false),
+                  onPressed: () => setState(() {
+                    _isEditMode = false;
+                    _editPatientId = null;
+                    _resetFormState();
+                  }),
                   icon: const Icon(Icons.close, size: 20),
                   label: const Text('Annuler'),
                   style: ElevatedButton.styleFrom(
@@ -971,6 +1122,7 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
     final email = _emailController.text.trim();
     final mutuelle = _mutuelleController.text.trim();
     final nir = _nirController.text.trim();
+    final dob = _dobIsoForSave();
     final allergies = _allergiesController.text.trim();
     final contreIndications = _contreIndicationsController.text.trim();
 
@@ -995,6 +1147,7 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
           'email': email,
           'mutuelle': mutuelle,
           'nir': nir,
+          'date_of_birth': dob,
           'allergies': allergies,
           'contraindications': contreIndications,
         },
@@ -1002,7 +1155,11 @@ class _ClientsPatientsScreenState extends State<ClientsPatientsScreen>
         whereArgs: [patient.id ?? ''],
       );
 
-      setState(() => _isEditMode = false);
+      setState(() {
+        _isEditMode = false;
+        _editPatientId = null;
+        _resetFormState();
+      });
       await _loadPatients();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

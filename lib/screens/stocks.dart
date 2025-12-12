@@ -1885,18 +1885,15 @@
 //   });
 // }
 
-
-
-
-
-
-
-
 // screens/stocks.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../app_theme.dart';
 import '../services/product_service.dart';
 import '../models/sale_models.dart';
+import '../models/stupefiant_mouvement.dart';
+import '../services/local_database_service.dart';
+import '../models/lot_entry.dart';
 
 class StocksScreen extends StatefulWidget {
   const StocksScreen({super.key});
@@ -1924,8 +1921,14 @@ class _StocksScreenState extends State<StocksScreen>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
     _loadStocks();
   }
@@ -1939,12 +1942,12 @@ class _StocksScreenState extends State<StocksScreen>
 
   Future<void> _loadStocks() async {
     final entries = await ProductService.instance.fetchStockEntries();
-    
+
     // Extract unique values for filters
     final families = <String>{};
     final labs = <String>{};
     final forms = <String>{};
-    
+
     setState(() {
       _allItems = entries
           .map(
@@ -1972,6 +1975,7 @@ class _StocksScreenState extends State<StocksScreen>
               fournisseur: e.fournisseur,
               ordonnance: e.ordonnance,
               controle: e.controle,
+              stupefiant: e.stupefiant,
               description: e.description,
               conditionnement: e.conditionnement,
               notice: e.notice,
@@ -1982,7 +1986,7 @@ class _StocksScreenState extends State<StocksScreen>
             ),
           )
           .toList();
-      
+
       // Build filter lists from actual data (keep 'Toutes'/'Tous' as last item)
       for (var item in _allItems) {
         if (item.family.isNotEmpty) families.add(item.family);
@@ -1990,9 +1994,12 @@ class _StocksScreenState extends State<StocksScreen>
         if (item.form.isNotEmpty) forms.add(item.form);
       }
 
-      final famList = families.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      final labList = labs.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      final formList = forms.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final famList = families.toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final labList = labs.toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final formList = forms.toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
       // Ensure the 'Toutes' / 'Tous' choice is last
       famList.removeWhere((s) => s.trim().isEmpty);
@@ -2006,7 +2013,7 @@ class _StocksScreenState extends State<StocksScreen>
       _familiesList = famList;
       _labsList = labList;
       _formsList = formList;
-      
+
       _loading = false;
     });
   }
@@ -2020,30 +2027,60 @@ class _StocksScreenState extends State<StocksScreen>
     final familleCtrl = TextEditingController(text: existing?.family ?? '');
     final laboCtrl = TextEditingController(text: existing?.lab ?? '');
     final formeCtrl = TextEditingController(text: existing?.form ?? '');
-    final achatCtrl = TextEditingController(text: existing?.prixAchat.toString() ?? '');
-    final venteCtrl = TextEditingController(text: existing?.prixVente.toString() ?? '');
+    final achatCtrl = TextEditingController(
+      text: existing?.prixAchat.toString() ?? '',
+    );
+    final venteCtrl = TextEditingController(
+      text: existing?.prixVente.toString() ?? '',
+    );
     final tvaCtrl = TextEditingController(text: existing?.tva.toString() ?? '');
-    final rembCtrl = TextEditingController(text: existing?.remboursement.toString() ?? '');
+    final rembCtrl = TextEditingController(
+      text: existing?.remboursement.toString() ?? '',
+    );
     final skuCtrl = TextEditingController(text: existing?.sku ?? '');
-    final localisationCtrl = TextEditingController(text: existing?.localisation ?? '');
-    final fournisseurCtrl = TextEditingController(text: existing?.fournisseur ?? '');
-    final descriptionCtrl = TextEditingController(text: existing?.description ?? '');
-    final seuilMaxCtrl = TextEditingController(text: (existing?.seuilMax ?? 0).toString());
+    final localisationCtrl = TextEditingController(
+      text: existing?.localisation ?? '',
+    );
+    final fournisseurCtrl = TextEditingController(
+      text: existing?.fournisseur ?? '',
+    );
+    final descriptionCtrl = TextEditingController(
+      text: existing?.description ?? '',
+    );
+    final seuilMaxCtrl = TextEditingController(
+      text: (existing?.seuilMax ?? 0).toString(),
+    );
     final noticeCtrl = TextEditingController(text: '');
     final imageCtrl = TextEditingController(text: '');
-    final seuilCtrl = TextEditingController(text: existing?.seuil.toString() ?? '');
-    final reserveCtrl = TextEditingController(text: existing?.qtyReserve.toString() ?? '');
-    final officineCtrl = TextEditingController(text: existing?.qtyOfficine.toString() ?? '');
-    final peremptionCtrl = TextEditingController(text: existing?.peremption ?? '');
+    final seuilCtrl = TextEditingController(
+      text: existing?.seuil.toString() ?? '',
+    );
+    final reserveCtrl = TextEditingController(
+      text: existing?.qtyReserve.toString() ?? '',
+    );
+    final officineCtrl = TextEditingController(
+      text: existing?.qtyOfficine.toString() ?? '',
+    );
+    final peremptionCtrl = TextEditingController(
+      text: existing?.peremption ?? '',
+    );
     final lotCtrl = TextEditingController(text: existing?.lot ?? '');
-    String typeValue = existing?.type.isNotEmpty == true ? existing!.type : 'Médicament';
-    String statutValue = existing?.statut.isNotEmpty == true ? existing!.statut : 'Actif';
-    String conditionnement = existing?.conditionnement.isNotEmpty == true ? existing!.conditionnement : 'Boîte';
+    String typeValue = existing?.type.isNotEmpty == true
+        ? existing!.type
+        : 'Médicament';
+    String statutValue = existing?.statut.isNotEmpty == true
+        ? existing!.statut
+        : 'Actif';
+    String conditionnement = existing?.conditionnement.isNotEmpty == true
+        ? existing!.conditionnement
+        : 'Boîte';
     bool ordonnance = existing?.ordonnance ?? false;
     bool controle = existing?.controle ?? false;
+    bool stupefiant = existing?.stupefiant ?? false;
     if (existing?.notice.isNotEmpty == true) noticeCtrl.text = existing!.notice;
     if (existing?.image.isNotEmpty == true) imageCtrl.text = existing!.image;
-    bool advanced = existing != null &&
+    bool advanced =
+        existing != null &&
         (existing.type.isNotEmpty ||
             existing.sku.isNotEmpty ||
             existing.seuilMax > 0 ||
@@ -2062,9 +2099,14 @@ class _StocksScreenState extends State<StocksScreen>
 
             return Dialog(
               backgroundColor: palette.card,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
               child: Container(
-                constraints: BoxConstraints(maxWidth: isWideDialog ? 1100 : 960, maxHeight: MediaQuery.of(context).size.height * 0.9),
+                constraints: BoxConstraints(
+                  maxWidth: isWideDialog ? 1100 : 960,
+                  maxHeight: MediaQuery.of(context).size.height * 0.9,
+                ),
                 padding: const EdgeInsets.all(22),
                 child: SingleChildScrollView(
                   child: Column(
@@ -2080,7 +2122,10 @@ class _StocksScreenState extends State<StocksScreen>
                               color: Colors.teal.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.add_box_outlined, color: Colors.teal),
+                            child: const Icon(
+                              Icons.add_box_outlined,
+                              color: Colors.teal,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -2088,10 +2133,21 @@ class _StocksScreenState extends State<StocksScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  existing == null ? 'Ajouter un produit' : 'Modifier le produit',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: palette.text),
+                                  existing == null
+                                      ? 'Ajouter un produit'
+                                      : 'Modifier le produit',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: palette.text,
+                                  ),
                                 ),
-                                Text('Mode simple ou avancé • prix, lots, statut', style: TextStyle(color: palette.subText, fontSize: 12)),
+                                Text(
+                                  'Mode simple ou avancé • prix, lots, statut',
+                                  style: TextStyle(
+                                    color: palette.subText,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -2104,9 +2160,21 @@ class _StocksScreenState extends State<StocksScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _modeChip('Simple', !advanced, palette, onTap: () => setModalState(() => advanced = false)),
+                                _modeChip(
+                                  'Simple',
+                                  !advanced,
+                                  palette,
+                                  onTap: () =>
+                                      setModalState(() => advanced = false),
+                                ),
                                 const SizedBox(width: 8),
-                                _modeChip('Avancé', advanced, palette, onTap: () => setModalState(() => advanced = true)),
+                                _modeChip(
+                                  'Avancé',
+                                  advanced,
+                                  palette,
+                                  onTap: () =>
+                                      setModalState(() => advanced = true),
+                                ),
                               ],
                             ),
                           ),
@@ -2121,119 +2189,259 @@ class _StocksScreenState extends State<StocksScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _sectionHeader('Identité produit', palette),
-                            _gridFields(
-                              [
-                                _formField(nameCtrl, 'Nom commercial', palette, requiredField: true, hint: 'Ex: Paracétamol 500mg'),
-                                _formField(cipCtrl, 'CIP / Code-barres', palette, requiredField: true, hint: 'EAN ou code interne'),
-                                _formField(dciCtrl, 'DCI', palette, hint: 'Substance active'),
-                                _formField(dosageCtrl, 'Dosage / Présentation', palette, hint: '500mg, sirop 125ml...'),
-                                _formField(familleCtrl, 'Famille thérapeutique', palette, hint: 'Antalgique, Antibiotique...'),
-                                _formField(formeCtrl, 'Forme galénique', palette, hint: 'Comprimé, Gélule...'),
-                                _formField(laboCtrl, 'Laboratoire', palette),
-                                _formField(lotCtrl, 'Lot', palette, hint: 'LOT-XYZ-01'),
-                              ],
-                            ),
+                            _gridFields([
+                              _formField(
+                                nameCtrl,
+                                'Nom commercial',
+                                palette,
+                                requiredField: true,
+                                hint: 'Ex: Paracétamol 500mg',
+                              ),
+                              _formField(
+                                cipCtrl,
+                                'CIP / Code-barres',
+                                palette,
+                                requiredField: true,
+                                hint: 'EAN ou code interne',
+                              ),
+                              _formField(
+                                dciCtrl,
+                                'DCI',
+                                palette,
+                                hint: 'Substance active',
+                              ),
+                              _formField(
+                                dosageCtrl,
+                                'Dosage / Présentation',
+                                palette,
+                                hint: '500mg, sirop 125ml...',
+                              ),
+                              _formField(
+                                familleCtrl,
+                                'Famille thérapeutique',
+                                palette,
+                                hint: 'Antalgique, Antibiotique...',
+                              ),
+                              _formField(
+                                formeCtrl,
+                                'Forme galénique',
+                                palette,
+                                hint: 'Comprimé, Gélule...',
+                              ),
+                              _formField(laboCtrl, 'Laboratoire', palette),
+                              _formField(
+                                lotCtrl,
+                                'Lot',
+                                palette,
+                                hint: 'LOT-XYZ-01',
+                              ),
+                            ]),
                             const SizedBox(height: 10),
                             _chipsRow(
                               label: 'Suggestions famille',
-                              options: const ['Antalgique', 'Antibiotique', 'Antispasmodique', 'Anti-inflammatoire'],
-                              onSelect: (value) => setModalState(() => familleCtrl.text = value),
+                              options: const [
+                                'Antalgique',
+                                'Antibiotique',
+                                'Antispasmodique',
+                                'Anti-inflammatoire',
+                              ],
+                              onSelect: (value) =>
+                                  setModalState(() => familleCtrl.text = value),
                               palette: palette,
                             ),
                             const SizedBox(height: 16),
                             _sectionHeader('Tarification', palette),
-                            _gridFields(
-                              [
-                                _formField(
-                                  achatCtrl,
-                                  'Prix achat (FCFA)',
-                                  palette,
-                                  keyboard: TextInputType.number,
-                                  hint: '0',
-                                  requiredField: true,
-                                  onChanged: (_) => setModalState(() {}),
-                                ),
-                                _formField(
-                                  venteCtrl,
-                                  'Prix vente (FCFA)',
-                                  palette,
-                                  keyboard: TextInputType.number,
-                                  hint: '0',
-                                  requiredField: true,
-                                  onChanged: (_) => setModalState(() {}),
-                                ),
-                                _formField(tvaCtrl, 'TVA (%)', palette, keyboard: TextInputType.number, hint: '18'),
-                                _formField(rembCtrl, 'Remboursement (%)', palette, keyboard: TextInputType.number, hint: '0'),
-                              ],
-                            ),
+                            _gridFields([
+                              _formField(
+                                achatCtrl,
+                                'Prix achat (FCFA)',
+                                palette,
+                                keyboard: TextInputType.number,
+                                hint: '0',
+                                requiredField: true,
+                                onChanged: (_) => setModalState(() {}),
+                              ),
+                              _formField(
+                                venteCtrl,
+                                'Prix vente (FCFA)',
+                                palette,
+                                keyboard: TextInputType.number,
+                                hint: '0',
+                                requiredField: true,
+                                onChanged: (_) => setModalState(() {}),
+                              ),
+                              _formField(
+                                tvaCtrl,
+                                'TVA (%)',
+                                palette,
+                                keyboard: TextInputType.number,
+                                hint: '18',
+                              ),
+                              _formField(
+                                rembCtrl,
+                                'Remboursement (%)',
+                                palette,
+                                keyboard: TextInputType.number,
+                                hint: '0',
+                              ),
+                            ]),
                             const SizedBox(height: 8),
-                            _marginBanner(palette, marginValues.percent, marginValues.value),
+                            _marginBanner(
+                              palette,
+                              marginValues.percent,
+                              marginValues.value,
+                            ),
                             const SizedBox(height: 16),
                             _sectionHeader('Stocks & Traçabilité', palette),
-                            _gridFields(
-                              [
-                                _formField(officineCtrl, 'Stock officine', palette, keyboard: TextInputType.number, hint: '0', requiredField: true),
-                                _formField(reserveCtrl, 'Stock réserve', palette, keyboard: TextInputType.number, hint: '0', requiredField: true),
-                            _formField(seuilCtrl, 'Seuil alerte', palette, keyboard: TextInputType.number, hint: 'Quantité min'),
-                            _dateField(
-                              context: context,
-                              controller: peremptionCtrl,
-                              label: 'Péremption',
-                              palette: palette,
-                              onPick: (value) => setModalState(() => peremptionCtrl.text = value),
-                            ),
-                              ],
-                            ),
+                            _gridFields([
+                              _formField(
+                                officineCtrl,
+                                'Stock officine',
+                                palette,
+                                keyboard: TextInputType.number,
+                                hint: '0',
+                                requiredField: true,
+                              ),
+                              _formField(
+                                reserveCtrl,
+                                'Stock réserve',
+                                palette,
+                                keyboard: TextInputType.number,
+                                hint: '0',
+                                requiredField: true,
+                              ),
+                              _formField(
+                                seuilCtrl,
+                                'Seuil alerte',
+                                palette,
+                                keyboard: TextInputType.number,
+                                hint: 'Quantité min',
+                              ),
+                              _dateField(
+                                context: context,
+                                controller: peremptionCtrl,
+                                label: 'Péremption',
+                                palette: palette,
+                                onPick: (value) => setModalState(
+                                  () => peremptionCtrl.text = value,
+                                ),
+                              ),
+                            ]),
                             if (advanced) ...[
                               const SizedBox(height: 20),
                               _sectionHeader('Version avancée', palette),
-                              _gridFields(
-                                [
-                              _formField(skuCtrl, 'SKU interne', palette, hint: 'Code interne'),
-                              _formField(localisationCtrl, 'Localisation / Rayon', palette, hint: 'Allée, étagère...'),
-                              _formField(seuilMaxCtrl, 'Seuil max', palette, keyboard: TextInputType.number, hint: 'Quantité max'),
-                              _formField(fournisseurCtrl, 'Fournisseur principal', palette, hint: 'Grossiste'),
-                              _dropdownField(
-                                label: 'Conditionnement',
-                                value: conditionnement,
-                                items: const ['Boîte', 'Plaquette', 'Bouteille', 'Unité', 'Autre'],
-                                onChanged: (v) => setModalState(() => conditionnement = v ?? 'Boîte'),
-                                palette: palette,
-                              ),
-                              _dropdownField(
-                                label: 'Type',
-                                value: typeValue,
-                                items: const ['Médicament', 'Dispositif médical', 'Parapharmacie', 'Accessoire'],
-                                onChanged: (v) => setModalState(() => typeValue = v ?? 'Médicament'),
-                                palette: palette,
+                              _gridFields([
+                                _formField(
+                                  skuCtrl,
+                                  'SKU interne',
+                                  palette,
+                                  hint: 'Code interne',
+                                ),
+                                _formField(
+                                  localisationCtrl,
+                                  'Localisation / Rayon',
+                                  palette,
+                                  hint: 'Allée, étagère...',
+                                ),
+                                _formField(
+                                  seuilMaxCtrl,
+                                  'Seuil max',
+                                  palette,
+                                  keyboard: TextInputType.number,
+                                  hint: 'Quantité max',
+                                ),
+                                _formField(
+                                  fournisseurCtrl,
+                                  'Fournisseur principal',
+                                  palette,
+                                  hint: 'Grossiste',
+                                ),
+                                _dropdownField(
+                                  label: 'Conditionnement',
+                                  value: conditionnement,
+                                  items: const [
+                                    'Boîte',
+                                    'Plaquette',
+                                    'Bouteille',
+                                    'Unité',
+                                    'Autre',
+                                  ],
+                                  onChanged: (v) => setModalState(
+                                    () => conditionnement = v ?? 'Boîte',
                                   ),
-                                  _dropdownField(
-                                    label: 'Statut',
-                                    value: statutValue,
-                                    items: const ['Actif', 'Désactivé', 'Rupture'],
-                                    onChanged: (v) => setModalState(() => statutValue = v ?? 'Actif'),
-                                    palette: palette,
+                                  palette: palette,
+                                ),
+                                _dropdownField(
+                                  label: 'Type',
+                                  value: typeValue,
+                                  items: const [
+                                    'Médicament',
+                                    'Dispositif médical',
+                                    'Parapharmacie',
+                                    'Accessoire',
+                                  ],
+                                  onChanged: (v) => setModalState(
+                                    () => typeValue = v ?? 'Médicament',
                                   ),
-                                  _toggleField(
-                                    label: 'Ordonnance requise',
-                                    value: ordonnance,
-                                    onChanged: (v) => setModalState(() => ordonnance = v),
-                                    palette: palette,
+                                  palette: palette,
+                                ),
+                                _dropdownField(
+                                  label: 'Statut',
+                                  value: statutValue,
+                                  items: const [
+                                    'Actif',
+                                    'Désactivé',
+                                    'Rupture',
+                                  ],
+                                  onChanged: (v) => setModalState(
+                                    () => statutValue = v ?? 'Actif',
                                   ),
-                              _toggleField(
-                                label: 'Médicament contrôlé',
-                                value: controle,
-                                onChanged: (v) => setModalState(() => controle = v),
-                                palette: palette,
-                              ),
-                              _formField(descriptionCtrl, 'Description / précautions', palette, hint: 'Contre-indications...', keyboard: TextInputType.multiline),
-                              _formField(noticeCtrl, 'Notice (URL/chemin)', palette, hint: 'notice.pdf'),
-                              _formField(imageCtrl, 'Image (URL/chemin)', palette, hint: 'image.jpg'),
+                                  palette: palette,
+                                ),
+                                _toggleField(
+                                  label: 'Ordonnance requise',
+                                  value: ordonnance,
+                                  onChanged: (v) =>
+                                      setModalState(() => ordonnance = v),
+                                  palette: palette,
+                                ),
+                                _toggleField(
+                                  label: 'Médicament contrôlé',
+                                  value: controle,
+                                  onChanged: (v) =>
+                                      setModalState(() => controle = v),
+                                  palette: palette,
+                                ),
+                                _toggleField(
+                                  label: 'Stupéfiant',
+                                  value: stupefiant,
+                                  onChanged: (v) =>
+                                      setModalState(() => stupefiant = v),
+                                  palette: palette,
+                                ),
+                                _formField(
+                                  descriptionCtrl,
+                                  'Description / précautions',
+                                  palette,
+                                  hint: 'Contre-indications...',
+                                  keyboard: TextInputType.multiline,
+                                ),
+                                _formField(
+                                  noticeCtrl,
+                                  'Notice (URL/chemin)',
+                                  palette,
+                                  hint: 'notice.pdf',
+                                ),
+                                _formField(
+                                  imageCtrl,
+                                  'Image (URL/chemin)',
+                                  palette,
+                                  hint: 'image.jpg',
+                                ),
+                              ]),
                             ],
-                          ),
-                        ],
-                      ],
-                    ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
                       // Actions
@@ -2252,13 +2460,19 @@ class _StocksScreenState extends State<StocksScreen>
                           ElevatedButton.icon(
                             icon: const Icon(Icons.save_alt, size: 18),
                             onPressed: () {
-                              final valid = formKey.currentState?.validate() ?? false;
+                              final valid =
+                                  formKey.currentState?.validate() ?? false;
                               if (valid) Navigator.pop(context, true);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.teal,
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             label: const Text('Enregistrer'),
                           ),
@@ -2276,8 +2490,10 @@ class _StocksScreenState extends State<StocksScreen>
 
     if (result != true) return;
 
+    final productId =
+        existing?.id ?? 'MED-${DateTime.now().millisecondsSinceEpoch}';
     await ProductService.instance.upsertProduct(
-      id: existing?.id,
+      id: productId,
       nom: nameCtrl.text.trim(),
       dci: dciCtrl.text.trim(),
       dosage: dosageCtrl.text.trim(),
@@ -2296,6 +2512,7 @@ class _StocksScreenState extends State<StocksScreen>
       fournisseur: fournisseurCtrl.text.trim(),
       ordonnance: ordonnance,
       controle: controle,
+      stupefiant: stupefiant,
       description: descriptionCtrl.text.trim(),
       conditionnement: conditionnement,
       notice: noticeCtrl.text.trim(),
@@ -2307,11 +2524,34 @@ class _StocksScreenState extends State<StocksScreen>
       peremptionIso: peremptionCtrl.text.trim(),
       lot: lotCtrl.text.trim(),
     );
+
+    final wasStupefiant = existing?.stupefiant ?? false;
+    if (stupefiant && !wasStupefiant) {
+      final qtyInitial =
+          (int.tryParse(officineCtrl.text.trim()) ?? 0) +
+          (int.tryParse(reserveCtrl.text.trim()) ?? 0);
+      await LocalDatabaseService.instance.insertStupefiantMouvement(
+        StupefiantMouvement(
+          id: 0,
+          produit: nameCtrl.text.trim(),
+          lot: lotCtrl.text.trim(),
+          type: 'Entrée',
+          quantite: qtyInitial,
+          date: DateTime.now(),
+          agent: 'Système',
+          motif: existing == null
+              ? 'Création produit stupéfiant'
+              : 'Déclaration produit stupéfiant',
+        ),
+      );
+    }
     await _loadStocks();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(existing == null ? 'Produit ajouté' : 'Produit mis à jour'),
+          content: Text(
+            existing == null ? 'Produit ajouté' : 'Produit mis à jour',
+          ),
           backgroundColor: Colors.teal,
         ),
       );
@@ -2335,10 +2575,14 @@ class _StocksScreenState extends State<StocksScreen>
         labelText: label,
         hintText: hint,
         filled: true,
-        fillColor: palette.isDark ? Colors.white.withOpacity(0.04) : Colors.grey[50],
+        fillColor: palette.isDark
+            ? Colors.white.withOpacity(0.04)
+            : Colors.grey[50],
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      validator: requiredField ? (v) => (v == null || v.trim().isEmpty) ? 'Champ requis' : null : null,
+      validator: requiredField
+          ? (v) => (v == null || v.trim().isEmpty) ? 'Champ requis' : null
+          : null,
     );
   }
 
@@ -2350,10 +2594,20 @@ class _StocksScreenState extends State<StocksScreen>
           Container(
             width: 6,
             height: 24,
-            decoration: BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.teal,
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
           const SizedBox(width: 10),
-          Text(title, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: palette.text)),
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: palette.text,
+            ),
+          ),
         ],
       ),
     );
@@ -2363,11 +2617,15 @@ class _StocksScreenState extends State<StocksScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 680;
-        final width = isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+        final width = isWide
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
         return Wrap(
           spacing: 12,
           runSpacing: 12,
-          children: fields.map((f) => SizedBox(width: width, child: f)).toList(),
+          children: fields
+              .map((f) => SizedBox(width: width, child: f))
+              .toList(),
         );
       },
     );
@@ -2392,13 +2650,22 @@ class _StocksScreenState extends State<StocksScreen>
                 (o) => GestureDetector(
                   onTap: () => onSelect(o),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.teal.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.teal.withOpacity(0.35)),
                     ),
-                    child: Text(o, style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      o,
+                      style: const TextStyle(
+                        color: Colors.teal,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               )
@@ -2418,14 +2685,21 @@ class _StocksScreenState extends State<StocksScreen>
     return DropdownButtonFormField<String>(
       value: value,
       isExpanded: true,
-      items: items.map((e) => DropdownMenuItem<String>(value: e, child: Text(e))).toList(),
+      items: items
+          .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+          .toList(),
       onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
-        fillColor: palette.isDark ? Colors.white.withOpacity(0.04) : Colors.grey[50],
+        fillColor: palette.isDark
+            ? Colors.white.withOpacity(0.04)
+            : Colors.grey[50],
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 14,
+        ),
       ),
       dropdownColor: palette.isDark ? Colors.grey[900] : Colors.white,
       icon: Icon(Icons.keyboard_arrow_down_rounded, color: palette.subText),
@@ -2447,14 +2721,18 @@ class _StocksScreenState extends State<StocksScreen>
         hintText: 'Sélectionner une date',
         suffixIcon: const Icon(Icons.event),
         filled: true,
-        fillColor: palette.isDark ? Colors.white.withOpacity(0.04) : Colors.grey[50],
+        fillColor: palette.isDark
+            ? Colors.white.withOpacity(0.04)
+            : Colors.grey[50],
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       ),
       onTap: () async {
         // Use Navigator to get the root context for date picker
         final rootContext = Navigator.of(context, rootNavigator: true).context;
         final now = DateTime.now();
-        final initial = controller.text.isNotEmpty ? DateTime.tryParse(controller.text) ?? now : now;
+        final initial = controller.text.isNotEmpty
+            ? DateTime.tryParse(controller.text) ?? now
+            : now;
         final picked = await showDatePicker(
           context: rootContext,
           initialDate: initial,
@@ -2481,18 +2759,18 @@ class _StocksScreenState extends State<StocksScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: palette.isDark ? Colors.white.withOpacity(0.04) : Colors.grey[50],
+        color: palette.isDark
+            ? Colors.white.withOpacity(0.04)
+            : Colors.grey[50],
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: palette.divider),
       ),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: TextStyle(color: palette.text))),
-          Switch(
-            value: value,
-            activeColor: Colors.teal,
-            onChanged: onChanged,
+          Expanded(
+            child: Text(label, style: TextStyle(color: palette.text)),
           ),
+          Switch(value: value, activeColor: Colors.teal, onChanged: onChanged),
         ],
       ),
     );
@@ -2518,13 +2796,21 @@ class _StocksScreenState extends State<StocksScreen>
             style: TextStyle(color: color, fontWeight: FontWeight.w700),
           ),
           const Spacer(),
-          Text('Basée sur Prix vente - Prix achat', style: TextStyle(color: palette.subText, fontSize: 12)),
+          Text(
+            'Basée sur Prix vente - Prix achat',
+            style: TextStyle(color: palette.subText, fontSize: 12),
+          ),
         ],
       ),
     );
   }
 
-  Widget _modeChip(String label, bool active, ThemeColors palette, {required VoidCallback onTap}) {
+  Widget _modeChip(
+    String label,
+    bool active,
+    ThemeColors palette, {
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -2535,7 +2821,13 @@ class _StocksScreenState extends State<StocksScreen>
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: active ? Colors.teal : palette.divider),
         ),
-        child: Text(label, style: TextStyle(color: active ? Colors.white : palette.text, fontWeight: FontWeight.w700)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? Colors.white : palette.text,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -2550,16 +2842,31 @@ class _StocksScreenState extends State<StocksScreen>
 
   List<StockItem> get _filteredItems {
     return _allItems.where((item) {
-      final matchesSearch = item.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+      final matchesSearch =
+          item.name.toLowerCase().contains(
+            _searchController.text.toLowerCase(),
+          ) ||
           item.code.contains(_searchController.text);
-      final matchesFamily = _selectedFamily == 'Toutes' || item.family == _selectedFamily;
+      final matchesFamily =
+          _selectedFamily == 'Toutes' || item.family == _selectedFamily;
       final matchesLab = _selectedLab == 'Tous' || item.lab == _selectedLab;
-      final matchesForm = _selectedForm == 'Toutes' || item.form == _selectedForm;
+      final matchesForm =
+          _selectedForm == 'Toutes' || item.form == _selectedForm;
       return matchesSearch && matchesFamily && matchesLab && matchesForm;
     }).toList();
   }
 
   int get _totalValue => _filteredItems.fold(0, (sum, i) => sum + i.valeur);
+
+  String _formatLotExpiry(String isoOrLegacy) {
+    final raw = isoOrLegacy.trim();
+    if (raw.isEmpty) return '-';
+    try {
+      return DateFormat('dd/MM/yyyy').format(DateTime.parse(raw));
+    } catch (_) {
+      return raw;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2593,18 +2900,31 @@ class _StocksScreenState extends State<StocksScreen>
                         children: [
                           Text(
                             '${_filteredItems.length} produits en stock',
-                            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: palette.text),
+                            style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.bold,
+                              color: palette.text,
+                            ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
                             decoration: BoxDecoration(
                               color: accent.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(30),
-                              border: Border.all(color: accent.withOpacity(0.3)),
+                              border: Border.all(
+                                color: accent.withOpacity(0.3),
+                              ),
                             ),
                             child: Text(
                               'Valeur totale : $_totalValue FCFA',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: accent),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: accent,
+                              ),
                             ),
                           ),
                         ],
@@ -2615,7 +2935,8 @@ class _StocksScreenState extends State<StocksScreen>
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         itemCount: _filteredItems.length,
-                        itemBuilder: (context, index) => _stockCard(_filteredItems[index], palette, accent),
+                        itemBuilder: (context, index) =>
+                            _stockCard(_filteredItems[index], palette, accent),
                       ),
                     ),
                   ],
@@ -2637,8 +2958,19 @@ class _StocksScreenState extends State<StocksScreen>
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Gestion des stocks', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: palette.text, letterSpacing: 1.2)),
-                Text('Produits • Quantités • Péremption • Valorisation', style: TextStyle(fontSize: 16, color: palette.subText)),
+                Text(
+                  'Gestion des stocks',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: palette.text,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                Text(
+                  'Produits • Quantités • Péremption • Valorisation',
+                  style: TextStyle(fontSize: 16, color: palette.subText),
+                ),
               ],
             ),
             const Spacer(),
@@ -2648,8 +2980,13 @@ class _StocksScreenState extends State<StocksScreen>
               label: const Text('Ajouter un produit'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -2665,14 +3002,19 @@ class _StocksScreenState extends State<StocksScreen>
         padding: const EdgeInsets.all(20),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final searchWidth = constraints.maxWidth > 900 ? 420.0 : constraints.maxWidth - 40;
+            final searchWidth = constraints.maxWidth > 900
+                ? 420.0
+                : constraints.maxWidth - 40;
             return Wrap(
               spacing: 12,
               runSpacing: 16,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: 280, maxWidth: searchWidth),
+                  constraints: BoxConstraints(
+                    minWidth: 280,
+                    maxWidth: searchWidth,
+                  ),
                   child: TextField(
                     controller: _searchController,
                     onChanged: (_) => setState(() {}),
@@ -2680,9 +3022,17 @@ class _StocksScreenState extends State<StocksScreen>
                       hintText: 'Rechercher un produit, code CIP...',
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
-                      fillColor: palette.isDark ? Colors.grey[850] : Colors.grey[100],
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      fillColor: palette.isDark
+                          ? Colors.grey[850]
+                          : Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 18,
+                      ),
                     ),
                   ),
                 ),
@@ -2731,14 +3081,24 @@ class _StocksScreenState extends State<StocksScreen>
       child: DropdownButtonFormField<String>(
         value: value,
         isExpanded: true,
-        items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14)))).toList(),
+        items: items
+            .map(
+              (e) => DropdownMenuItem(
+                value: e,
+                child: Text(e, style: const TextStyle(fontSize: 14)),
+              ),
+            )
+            .toList(),
         onChanged: onChanged,
         decoration: InputDecoration(
           labelText: label,
           filled: true,
           fillColor: Colors.transparent,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 18,
+          ),
         ),
         dropdownColor: palette.isDark ? Colors.grey[900] : Colors.white,
         icon: Icon(Icons.keyboard_arrow_down_rounded, color: palette.subText),
@@ -2762,8 +3122,8 @@ class _StocksScreenState extends State<StocksScreen>
           color: isRupture
               ? Colors.red.withOpacity(0.35)
               : isAlerte
-                  ? Colors.orange.withOpacity(0.3)
-                  : palette.divider,
+              ? Colors.orange.withOpacity(0.3)
+              : palette.divider,
           width: isRupture || isAlerte ? 1.5 : 1,
         ),
         boxShadow: [
@@ -2771,8 +3131,8 @@ class _StocksScreenState extends State<StocksScreen>
             color: isRupture
                 ? Colors.red.withOpacity(0.15)
                 : isAlerte
-                    ? Colors.orange.withOpacity(0.1)
-                    : Colors.black.withOpacity(0.06),
+                ? Colors.orange.withOpacity(0.1)
+                : Colors.black.withOpacity(0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -2789,15 +3149,35 @@ class _StocksScreenState extends State<StocksScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text)),
+                    Text(
+                      item.name,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: palette.text,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(item.code, style: TextStyle(fontSize: 13, color: palette.subText, fontFamily: 'Roboto Mono')),
+                    Text(
+                      item.code,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: palette.subText,
+                        fontFamily: 'Roboto Mono',
+                      ),
+                    ),
                     if (item.dci.isNotEmpty || item.dosage.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          [item.dci, item.dosage].where((e) => e.isNotEmpty).join(' • '),
-                          style: TextStyle(fontSize: 13, color: palette.subText),
+                          [
+                            item.dci,
+                            item.dosage,
+                          ].where((e) => e.isNotEmpty).join(' • '),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: palette.subText,
+                          ),
                         ),
                       ),
                   ],
@@ -2806,7 +3186,11 @@ class _StocksScreenState extends State<StocksScreen>
               if (isRupture)
                 const Icon(Icons.error, color: Colors.red, size: 30)
               else if (isAlerte)
-                const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 30),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                  size: 30,
+                ),
             ],
           ),
           const SizedBox(height: 18),
@@ -2821,8 +3205,10 @@ class _StocksScreenState extends State<StocksScreen>
               _infoChip('Remb.', '${item.remboursement}%', palette),
               if (item.type.isNotEmpty) _infoChip('Type', item.type, palette),
               _infoChip('Statut', item.statut, palette),
-              if (item.conditionnement.isNotEmpty) _infoChip('Cond.', item.conditionnement, palette),
-              if (item.localisation.isNotEmpty) _infoChip('Localisation', item.localisation, palette),
+              if (item.conditionnement.isNotEmpty)
+                _infoChip('Cond.', item.conditionnement, palette),
+              if (item.localisation.isNotEmpty)
+                _infoChip('Localisation', item.localisation, palette),
               if (item.sku.isNotEmpty) _infoChip('SKU', item.sku, palette),
             ],
           ),
@@ -2833,9 +3219,25 @@ class _StocksScreenState extends State<StocksScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _stockRow('Officine', item.qtyOfficine, isRupture || isAlerte, palette),
-                    _stockRow('Réserve', item.qtyReserve, isRupture || isAlerte, palette),
-                    _stockRow('Total', total, isRupture || isAlerte, palette, bold: true),
+                    _stockRow(
+                      'Officine',
+                      item.qtyOfficine,
+                      isRupture || isAlerte,
+                      palette,
+                    ),
+                    _stockRow(
+                      'Réserve',
+                      item.qtyReserve,
+                      isRupture || isAlerte,
+                      palette,
+                    ),
+                    _stockRow(
+                      'Total',
+                      total,
+                      isRupture || isAlerte,
+                      palette,
+                      bold: true,
+                    ),
                   ],
                 ),
               ),
@@ -2843,7 +3245,10 @@ class _StocksScreenState extends State<StocksScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('Seuil mini : ${item.seuil}', style: TextStyle(color: palette.subText, fontSize: 14)),
+                  Text(
+                    'Seuil mini : ${item.seuil}',
+                    style: TextStyle(color: palette.subText, fontSize: 14),
+                  ),
                   Text(
                     'Péremption : ${item.peremption}',
                     style: TextStyle(
@@ -2855,7 +3260,11 @@ class _StocksScreenState extends State<StocksScreen>
                   const SizedBox(height: 12),
                   Text(
                     '${item.valeur.toStringAsFixed(0)} FCFA',
-                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: accent),
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      color: accent,
+                    ),
                   ),
                 ],
               ),
@@ -2869,15 +3278,29 @@ class _StocksScreenState extends State<StocksScreen>
                 Chip(
                   backgroundColor: Colors.orange.withOpacity(0.15),
                   label: const Text('Ordonnance requise'),
-                  avatar: const Icon(Icons.receipt_long, size: 18, color: Colors.orange),
-                  labelStyle: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                  avatar: const Icon(
+                    Icons.receipt_long,
+                    size: 18,
+                    color: Colors.orange,
+                  ),
+                  labelStyle: const TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               if (item.controle)
                 Chip(
                   backgroundColor: Colors.red.withOpacity(0.15),
                   label: const Text('Contrôlé'),
-                  avatar: const Icon(Icons.verified_user, size: 18, color: Colors.red),
-                  labelStyle: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  avatar: const Icon(
+                    Icons.verified_user,
+                    size: 18,
+                    color: Colors.red,
+                  ),
+                  labelStyle: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
             ],
           ),
@@ -2894,6 +3317,12 @@ class _StocksScreenState extends State<StocksScreen>
                   style: TextButton.styleFrom(foregroundColor: accent),
                 ),
                 TextButton.icon(
+                  onPressed: () => _showLotsDialog(item),
+                  icon: const Icon(Icons.layers, size: 18),
+                  label: const Text('Lots'),
+                  style: TextButton.styleFrom(foregroundColor: palette.subText),
+                ),
+                TextButton.icon(
                   onPressed: () => _showMovementsDialog(item),
                   icon: const Icon(Icons.history, size: 18),
                   label: const Text('Mouvements'),
@@ -2907,18 +3336,304 @@ class _StocksScreenState extends State<StocksScreen>
     );
   }
 
-  Widget _stockRow(String label, int qty, bool alert, ThemeColors palette, {bool bold = false}) {
+  void _showLotsDialog(StockItem item) async {
+    final palette = ThemeColors.from(context);
+    List<LotEntry> lots = [];
+    try {
+      lots = await ProductService.instance.fetchLotsForProduct(item.id);
+    } catch (_) {}
+    if (!mounted) return;
+
+    Future<void> reloadLots(StateSetter setModalState) async {
+      final refreshed = await ProductService.instance.fetchLotsForProduct(
+        item.id,
+      );
+      setModalState(() => lots = refreshed);
+      await _loadStocks();
+    }
+
+    Future<void> openLotForm({LotEntry? existing}) async {
+      final lotCtrl = TextEditingController(text: existing?.lot ?? '');
+      final qtyCtrl = TextEditingController(
+        text: (existing?.quantite ?? 0).toString(),
+      );
+      DateTime? pickedExpiry;
+      final existingExpiryRaw = existing?.peremptionIso.trim() ?? '';
+      if (existingExpiryRaw.isNotEmpty) {
+        pickedExpiry = DateTime.tryParse(existingExpiryRaw);
+      }
+      final expiryCtrl = TextEditingController(
+        text: pickedExpiry != null
+            ? DateFormat('dd/MM/yyyy').format(pickedExpiry)
+            : (existingExpiryRaw.isNotEmpty ? existingExpiryRaw : ''),
+      );
+
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setInner) {
+              return AlertDialog(
+                backgroundColor: palette.card,
+                title: Text(
+                  existing == null ? 'Ajouter un lot' : 'Modifier le lot',
+                  style: TextStyle(color: palette.text),
+                ),
+                content: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: lotCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Numéro de lot',
+                          hintText: 'LOT-XYZ-01',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: qtyCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Quantité',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: expiryCtrl,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Date péremption',
+                          suffixIcon: Icon(Icons.calendar_month),
+                        ),
+                        onTap: () async {
+                          final initial =
+                              pickedExpiry ??
+                              DateTime.now().add(const Duration(days: 365));
+                          final d = await showDatePicker(
+                            context: context,
+                            initialDate: initial,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (d == null) return;
+                          setInner(() {
+                            pickedExpiry = d;
+                            expiryCtrl.text = DateFormat(
+                              'dd/MM/yyyy',
+                            ).format(d);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Annuler'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context, true),
+                    icon: const Icon(Icons.save, size: 18),
+                    label: const Text('Enregistrer'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      if (ok != true) return;
+      final lotVal = lotCtrl.text.trim();
+      final qtyVal = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+      if (lotVal.isEmpty || qtyVal < 0) return;
+      final expiryIso = pickedExpiry != null
+          ? pickedExpiry!.toIso8601String()
+          : existingExpiryRaw;
+      await ProductService.instance.upsertLot(
+        id: existing?.id,
+        medicamentId: item.id,
+        lot: lotVal,
+        peremptionIso: expiryIso,
+        quantite: qtyVal,
+      );
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              backgroundColor: palette.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: 700,
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Lots de stock',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: palette.text,
+                              ),
+                            ),
+                            Text(
+                              item.name,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: palette.subText,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                await openLotForm();
+                                await reloadLots(setModalState);
+                              },
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Ajouter'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: lots.isEmpty
+                          ? Center(
+                              child: Text(
+                                'Aucun lot enregistré',
+                                style: TextStyle(color: palette.subText),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: lots.length,
+                              separatorBuilder: (_, __) =>
+                                  Divider(color: palette.divider),
+                              itemBuilder: (context, index) {
+                                final l = lots[index];
+                                final expiryText = _formatLotExpiry(
+                                  l.peremptionIso,
+                                );
+                                return ListTile(
+                                  title: Text(
+                                    l.lot,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: palette.text,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'Péremption: $expiryText',
+                                    style: TextStyle(color: palette.subText),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${l.quantite}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: palette.text,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      IconButton(
+                                        tooltip: 'Modifier',
+                                        onPressed: () async {
+                                          await openLotForm(existing: l);
+                                          await reloadLots(setModalState);
+                                        },
+                                        icon: const Icon(Icons.edit, size: 18),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Supprimer',
+                                        onPressed: () async {
+                                          await ProductService.instance
+                                              .deleteLot(l.id, item.id);
+                                          await reloadLots(setModalState);
+                                        },
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _stockRow(
+    String label,
+    int qty,
+    bool alert,
+    ThemeColors palette, {
+    bool bold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
-          SizedBox(width: 90, child: Text(label, style: TextStyle(color: palette.subText, fontSize: 14))),
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: TextStyle(color: palette.subText, fontSize: 14),
+            ),
+          ),
           Text(
             qty.toString(),
             style: TextStyle(
               fontSize: bold ? 20 : 17,
               fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-              color: alert ? (qty == 0 ? Colors.red : Colors.orange) : palette.text,
+              color: alert
+                  ? (qty == 0 ? Colors.red : Colors.orange)
+                  : palette.text,
             ),
           ),
         ],
@@ -2930,12 +3645,18 @@ class _StocksScreenState extends State<StocksScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: palette.isDark ? Colors.white.withOpacity(0.08) : Colors.grey[200],
+        color: palette.isDark
+            ? Colors.white.withOpacity(0.08)
+            : Colors.grey[200],
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
         '$label: $value',
-        style: TextStyle(fontSize: 12.5, color: palette.text.withOpacity(0.9), fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 12.5,
+          color: palette.text.withOpacity(0.9),
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -2962,43 +3683,56 @@ class _StocksScreenState extends State<StocksScreen>
     List<StockMovement> movements = [];
     final palette = ThemeColors.from(context);
     try {
-      movements = await ProductService.instance.fetchMovementsForProduct(item.id);
+      movements = await ProductService.instance.fetchMovementsForProduct(
+        item.id,
+      );
       // Ensure the product name is set on each movement
       movements = movements
-          .map((m) => StockMovement(
-                id: m.id,
-                productName: item.name,
-                type: m.type,
-                quantity: m.quantity,
-                quantityBefore: m.quantityBefore,
-                quantityAfter: m.quantityAfter,
-                reason: m.reason,
-                date: m.date,
-                reference: m.reference,
-                notes: m.notes,
-                user: m.user,
-              ))
+          .map(
+            (m) => StockMovement(
+              id: m.id,
+              productName: item.name,
+              type: m.type,
+              quantity: m.quantity,
+              quantityBefore: m.quantityBefore,
+              quantityAfter: m.quantityAfter,
+              reason: m.reason,
+              date: m.date,
+              reference: m.reference,
+              notes: m.notes,
+              user: m.user,
+            ),
+          )
           .toList();
     } catch (e, st) {
       // ignore: avoid_print
       print('Failed to load movements for product ${item.id}: $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible de charger les mouvements pour ce produit')),
+          const SnackBar(
+            content: Text(
+              'Impossible de charger les mouvements pour ce produit',
+            ),
+          ),
         );
       }
     }
-    
+
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       builder: (context) {
         return Dialog(
           backgroundColor: palette.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: Container(
-            constraints: BoxConstraints(maxWidth: 900, maxHeight: MediaQuery.of(context).size.height * 0.85),
+            constraints: BoxConstraints(
+              maxWidth: 900,
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
             padding: const EdgeInsets.all(22),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -3013,11 +3747,18 @@ class _StocksScreenState extends State<StocksScreen>
                       children: [
                         Text(
                           'Mouvements de stock',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: palette.text),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: palette.text,
+                          ),
                         ),
                         Text(
                           item.name,
-                          style: TextStyle(fontSize: 14, color: palette.subText),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: palette.subText,
+                          ),
                         ),
                       ],
                     ),
@@ -3033,9 +3774,33 @@ class _StocksScreenState extends State<StocksScreen>
                   spacing: 16,
                   runSpacing: 12,
                   children: [
-                    _movementStat('Total entrées', movements.where((m) => m.type == 'entree').fold<int>(0, (sum, m) => sum + m.quantity).toString(), const Color(0xFF10B981), palette),
-                    _movementStat('Total sorties', movements.where((m) => m.type == 'sortie').fold<int>(0, (sum, m) => sum + m.quantity).toString(), const Color(0xFFEF4444), palette),
-                    _movementStat('Ajustements', movements.where((m) => m.type == 'ajustement').length.toString(), const Color(0xFFF59E0B), palette),
+                    _movementStat(
+                      'Total entrées',
+                      movements
+                          .where((m) => m.type == 'entree')
+                          .fold<int>(0, (sum, m) => sum + m.quantity)
+                          .toString(),
+                      const Color(0xFF10B981),
+                      palette,
+                    ),
+                    _movementStat(
+                      'Total sorties',
+                      movements
+                          .where((m) => m.type == 'sortie')
+                          .fold<int>(0, (sum, m) => sum + m.quantity)
+                          .toString(),
+                      const Color(0xFFEF4444),
+                      palette,
+                    ),
+                    _movementStat(
+                      'Ajustements',
+                      movements
+                          .where((m) => m.type == 'ajustement')
+                          .length
+                          .toString(),
+                      const Color(0xFFF59E0B),
+                      palette,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -3046,9 +3811,16 @@ class _StocksScreenState extends State<StocksScreen>
                       padding: const EdgeInsets.all(32),
                       child: Column(
                         children: [
-                          Icon(Icons.inbox_outlined, size: 48, color: palette.subText.withOpacity(0.5)),
+                          Icon(
+                            Icons.inbox_outlined,
+                            size: 48,
+                            color: palette.subText.withOpacity(0.5),
+                          ),
                           const SizedBox(height: 12),
-                          Text('Aucun mouvement enregistré', style: TextStyle(color: palette.subText)),
+                          Text(
+                            'Aucun mouvement enregistré',
+                            style: TextStyle(color: palette.subText),
+                          ),
                         ],
                       ),
                     ),
@@ -3057,7 +3829,9 @@ class _StocksScreenState extends State<StocksScreen>
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
-                        children: movements.map((movement) => _movementTile(movement, palette)).toList(),
+                        children: movements
+                            .map((movement) => _movementTile(movement, palette))
+                            .toList(),
                       ),
                     ),
                   ),
@@ -3069,7 +3843,12 @@ class _StocksScreenState extends State<StocksScreen>
     );
   }
 
-  Widget _movementStat(String label, String value, Color color, ThemeColors palette) {
+  Widget _movementStat(
+    String label,
+    String value,
+    Color color,
+    ThemeColors palette,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -3083,22 +3862,37 @@ class _StocksScreenState extends State<StocksScreen>
         children: [
           Text(label, style: TextStyle(fontSize: 12, color: palette.subText)),
           const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _movementTile(StockMovement movement, ThemeColors palette) {
-    final isPositive = movement.type == 'entree' || (movement.type == 'ajustement' && movement.quantity > 0);
-    
+    final isPositive =
+        movement.type == 'entree' ||
+        (movement.type == 'ajustement' && movement.quantity > 0);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: palette.isDark ? Colors.white.withOpacity(0.05) : Colors.grey[50],
+        color: palette.isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: palette.isDark ? Colors.white.withOpacity(0.1) : Colors.grey[300]!),
+        border: Border.all(
+          color: palette.isDark
+              ? Colors.white.withOpacity(0.1)
+              : Colors.grey[300]!,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3112,7 +3906,11 @@ class _StocksScreenState extends State<StocksScreen>
                   children: [
                     Text(
                       movement.displayType,
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: movement.typeColor),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: movement.typeColor,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -3130,7 +3928,9 @@ class _StocksScreenState extends State<StocksScreen>
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                      color: isPositive
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFEF4444),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -3147,22 +3947,35 @@ class _StocksScreenState extends State<StocksScreen>
             children: [
               Icon(Icons.access_time, size: 14, color: palette.subText),
               const SizedBox(width: 6),
-              Text(movement.formattedDate, style: TextStyle(fontSize: 12, color: palette.subText)),
+              Text(
+                movement.formattedDate,
+                style: TextStyle(fontSize: 12, color: palette.subText),
+              ),
               const SizedBox(width: 16),
               Icon(Icons.person, size: 14, color: palette.subText),
               const SizedBox(width: 6),
-              Text(movement.user, style: TextStyle(fontSize: 12, color: palette.subText)),
+              Text(
+                movement.user,
+                style: TextStyle(fontSize: 12, color: palette.subText),
+              ),
               if (movement.reference != null) ...[
                 const SizedBox(width: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: movement.typeColor.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     movement.reference!,
-                    style: TextStyle(fontSize: 11, color: movement.typeColor, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: movement.typeColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -3173,13 +3986,23 @@ class _StocksScreenState extends State<StocksScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: palette.isDark ? Colors.white.withOpacity(0.03) : Colors.grey[100],
+                color: palette.isDark
+                    ? Colors.white.withOpacity(0.03)
+                    : Colors.grey[100],
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: palette.isDark ? Colors.white.withOpacity(0.08) : Colors.grey[200]!),
+                border: Border.all(
+                  color: palette.isDark
+                      ? Colors.white.withOpacity(0.08)
+                      : Colors.grey[200]!,
+                ),
               ),
               child: Text(
                 movement.notes!,
-                style: TextStyle(fontSize: 12, color: palette.subText, fontStyle: FontStyle.italic),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: palette.subText,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
           ],
@@ -3224,7 +4047,7 @@ class StockItem {
       tva,
       remboursement,
       valeur;
-  final bool ordonnance, controle;
+  final bool ordonnance, controle, stupefiant;
 
   const StockItem({
     required this.id,
@@ -3250,6 +4073,7 @@ class StockItem {
     required this.fournisseur,
     required this.ordonnance,
     required this.controle,
+    required this.stupefiant,
     required this.description,
     required this.conditionnement,
     required this.notice,

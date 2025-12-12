@@ -249,7 +249,9 @@ class _CommandesFournisseursScreenState
                               // === HISTORIQUE COMMANDES ===
                               Expanded(
                                 flex: 2,
-                                child: _buildHistoriqueCommandesWithTabs(palette),
+                                child: _buildHistoriqueCommandesWithTabs(
+                                  palette,
+                                ),
                               ),
                             ],
                           ),
@@ -291,8 +293,11 @@ class _CommandesFournisseursScreenState
           ),
         ),
         IconButton(
-          tooltip: _showInfosCommande ? 'Masquer infos commande' : 'Afficher infos commande',
-          onPressed: () => setState(() => _showInfosCommande = !_showInfosCommande),
+          tooltip: _showInfosCommande
+              ? 'Masquer infos commande'
+              : 'Afficher infos commande',
+          onPressed: () =>
+              setState(() => _showInfosCommande = !_showInfosCommande),
           icon: Icon(
             _showInfosCommande ? Icons.visibility_off : Icons.visibility,
             color: palette.subText,

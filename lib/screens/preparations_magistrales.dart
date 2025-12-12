@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import '../app_theme.dart';
 import 'package:intl/intl.dart';
+import '../models/preparation_magistrale.dart';
+import '../services/local_database_service.dart';
 
 class PreparationsMagistralesScreen extends StatefulWidget {
   const PreparationsMagistralesScreen({super.key});
@@ -19,62 +21,10 @@ class _PreparationsMagistralesScreenState
 
   String _searchQuery = '';
   String _selectedFormule = 'Toutes';
-  Formula? _formuleSelectionnee;
-
-  final List<Formula> _formules = [
-    Formula(
-      nom: 'Sirop antitussif maison',
-      categorie: 'Sirop',
-      quantiteTotale: 200,
-      unite: 'ml',
-      composants: [
-        Composant(nom: 'Codéine phosphate', quantite: 0.2, unite: 'g'),
-        Composant(nom: 'Sirop simple', quantite: 180, unite: 'ml'),
-        Composant(nom: 'Eau purifiée', quantite: 20, unite: 'ml'),
-        Composant(nom: 'Arôme cerise', quantite: 1, unite: 'ml'),
-      ],
-      instructions:
-          'Dissoudre la codéine dans 10 ml d\'eau chaude, ajouter au sirop simple, compléter avec eau purifiée, ajouter arôme, homogénéiser.',
-      conservation: '15 jours à température ambiante',
-      posologie: '5 ml × 3/jour',
-    ),
-    Formula(
-      nom: 'Crème émolliente 20%',
-      categorie: 'Crème',
-      quantiteTotale: 100,
-      unite: 'g',
-      composants: [
-        Composant(nom: 'Vaseline', quantite: 30, unite: 'g'),
-        Composant(nom: 'Lanoline', quantite: 10, unite: 'g'),
-        Composant(nom: 'Paraffine liquide', quantite: 40, unite: 'g'),
-        Composant(nom: 'Cire émulsifiante', quantite: 15, unite: 'g'),
-        Composant(nom: 'Eau purifiée', quantite: 5, unite: 'g'),
-      ],
-      instructions:
-          'Faire fondre la phase grasse au bain-marie, incorporer l\'eau tiède progressivement en agitant, laisser refroidir en remuant.',
-      conservation: '3 mois au réfrigérateur',
-      posologie: 'Application 2 fois par jour',
-    ),
-  ];
-
-  final List<Preparation> _preparations = [
-    Preparation(
-      id: 'PRP-2025-187',
-      date: DateTime(2025, 12, 9),
-      formule: 'Sirop antitussif maison',
-      quantite: 200,
-      preparateur: 'Marie K.',
-      statut: 'Validée',
-    ),
-    Preparation(
-      id: 'PRP-2025-186',
-      date: DateTime(2025, 12, 8),
-      formule: 'Crème émolliente 20%',
-      quantite: 100,
-      preparateur: 'Jean A.',
-      statut: 'En cours',
-    ),
-  ];
+  PreparationMagistrale? _formuleSelectionnee;
+  List<PreparationMagistrale> _formules = [];
+  bool _loadingFormules = true;
+  String? _formulesError;
 
   @override
   void initState() {
@@ -88,6 +38,7 @@ class _PreparationsMagistralesScreenState
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
+    _loadFormules();
   }
 
   @override
@@ -96,10 +47,45 @@ class _PreparationsMagistralesScreenState
     super.dispose();
   }
 
+  Future<void> _loadFormules() async {
+    setState(() {
+      _loadingFormules = true;
+      _formulesError = null;
+    });
+    try {
+      await LocalDatabaseService.instance.init();
+      final formules = await LocalDatabaseService.instance
+          .getPreparationsMagistrales();
+      if (!mounted) return;
+      setState(() {
+        _formules = formules;
+        _loadingFormules = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingFormules = false;
+        _formulesError = e.toString();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = ThemeColors.from(context);
     final accent = Colors.teal;
+
+    if (_loadingFormules) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_formulesError != null) {
+      return Center(
+        child: Text(
+          'Erreur: $_formulesError',
+          style: TextStyle(color: palette.text),
+        ),
+      );
+    }
 
     return FadeTransition(
       opacity: _fade,
@@ -204,7 +190,7 @@ class _PreparationsMagistralesScreenState
             ),
             const Spacer(),
             ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: () => _ouvrirDialogFormule(),
               icon: const Icon(Icons.add),
               label: const Text('Nouvelle formule'),
               style: ElevatedButton.styleFrom(
@@ -286,7 +272,23 @@ class _PreparationsMagistralesScreenState
                       '${formule.categorie} • ${formule.quantiteTotale}${formule.unite}',
                       style: TextStyle(color: palette.subText),
                     ),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: () =>
+                              _ouvrirDialogFormule(existing: formule),
+                          icon: const Icon(Icons.edit, size: 20),
+                          tooltip: 'Modifier',
+                        ),
+                        IconButton(
+                          onPressed: () => _confirmerSuppression(formule),
+                          icon: const Icon(Icons.delete, size: 20),
+                          tooltip: 'Supprimer',
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
                     onTap: () => setState(() => _formuleSelectionnee = formule),
                   ),
                 );
@@ -320,7 +322,7 @@ class _PreparationsMagistralesScreenState
   }
 
   Widget _buildDetailFormule(
-    Formula formule,
+    PreparationMagistrale formule,
     ThemeColors palette,
     Color accent,
   ) {
@@ -441,19 +443,48 @@ class _PreparationsMagistralesScreenState
 
             const SizedBox(height: 32),
 
-            // === TRAÇABILITÉ RÉCENTE ===
-            _section('Dernières préparations', Icons.history, palette),
+            _section('Coût & Prix', Icons.attach_money, palette),
             const SizedBox(height: 16),
-            ..._preparations
-                .where((p) => p.formule == formule.nom)
-                .map((p) => _prepaRow(p, palette, accent)),
+            Row(
+              children: [
+                Expanded(
+                  child: _infoBox(
+                    'Coût total',
+                    '${NumberFormat('#,##0', 'fr_FR').format(formule.cout)} FCFA',
+                    Icons.shopping_cart,
+                    Colors.orange,
+                    palette,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _infoBox(
+                    'Prix de vente',
+                    '${NumberFormat('#,##0', 'fr_FR').format(formule.prix)} FCFA',
+                    Icons.sell,
+                    Colors.teal,
+                    palette,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _infoBox(
+                    'Marge',
+                    '${formule.margePourcentage.toStringAsFixed(1)}%',
+                    Icons.trending_up,
+                    Colors.purple,
+                    palette,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _composantRow(Composant c, ThemeColors palette) {
+  Widget _composantRow(ComposantPreparation c, ThemeColors palette) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -521,49 +552,372 @@ class _PreparationsMagistralesScreenState
     );
   }
 
-  Widget _prepaRow(Preparation p, ThemeColors palette, Color accent) {
-    final color = p.statut == 'Validée' ? Colors.green : Colors.orange;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: palette.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            p.statut == 'Validée' ? Icons.check_circle : Icons.pending,
-            color: color,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              p.id,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: palette.text,
+  Future<void> _ouvrirDialogFormule({PreparationMagistrale? existing}) async {
+    final formKey = GlobalKey<FormState>();
+    final nomCtrl = TextEditingController(text: existing?.nom ?? '');
+    final categorieCtrl = TextEditingController(
+      text: existing?.categorie ?? 'Sirop',
+    );
+    final quantiteCtrl = TextEditingController(
+      text: existing != null ? existing.quantiteTotale.toString() : '',
+    );
+    final uniteCtrl = TextEditingController(text: existing?.unite ?? 'ml');
+    final instructionsCtrl = TextEditingController(
+      text: existing?.instructions ?? '',
+    );
+    final conservationCtrl = TextEditingController(
+      text: existing?.conservation ?? '',
+    );
+    final posologieCtrl = TextEditingController(
+      text: existing?.posologie ?? '',
+    );
+    final coutCtrl = TextEditingController(
+      text: existing != null ? existing.cout.toStringAsFixed(0) : '',
+    );
+    final prixCtrl = TextEditingController(
+      text: existing != null ? existing.prix.toStringAsFixed(0) : '',
+    );
+    String statut = existing?.statut ?? 'Validée';
+
+    final composantInputs = <Map<String, TextEditingController>>[
+      for (final c in existing?.composants ?? const <ComposantPreparation>[])
+        {
+          'nom': TextEditingController(text: c.nom),
+          'quantite': TextEditingController(text: c.quantite.toString()),
+          'unite': TextEditingController(text: c.unite),
+        },
+    ];
+    if (composantInputs.isEmpty) {
+      composantInputs.add({
+        'nom': TextEditingController(),
+        'quantite': TextEditingController(),
+        'unite': TextEditingController(),
+      });
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final palette = ThemeColors.from(context);
+        return StatefulBuilder(
+          builder: (context, setLocal) {
+            return AlertDialog(
+              title: Text(
+                existing == null ? 'Nouvelle formule' : 'Modifier formule',
               ),
-            ),
+              content: Form(
+                key: formKey,
+                child: SizedBox(
+                  width: 520,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: nomCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Nom formule',
+                          ),
+                          validator: (v) =>
+                              (v == null || v.trim().isEmpty) ? 'Requis' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: categorieCtrl.text.isEmpty
+                              ? 'Sirop'
+                              : categorieCtrl.text,
+                          decoration: const InputDecoration(
+                            labelText: 'Catégorie',
+                          ),
+                          items:
+                              const [
+                                    'Sirop',
+                                    'Crème',
+                                    'Gélule',
+                                    'Pommade',
+                                    'Solution',
+                                    'Autre',
+                                  ]
+                                  .map(
+                                    (c) => DropdownMenuItem(
+                                      value: c,
+                                      child: Text(c),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (v) => categorieCtrl.text = v ?? 'Sirop',
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: quantiteCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Quantité totale',
+                                ),
+                                keyboardType: TextInputType.number,
+                                validator: (v) => int.tryParse(v ?? '') == null
+                                    ? 'Nombre'
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: uniteCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Unité',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Text(
+                              'Composants',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: palette.text,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              onPressed: () {
+                                composantInputs.add({
+                                  'nom': TextEditingController(),
+                                  'quantite': TextEditingController(),
+                                  'unite': TextEditingController(),
+                                });
+                                setLocal(() {});
+                              },
+                              icon: const Icon(Icons.add),
+                              tooltip: 'Ajouter composant',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ...composantInputs.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final ctrls = entry.value;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: TextFormField(
+                                    controller: ctrls['nom'],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Nom',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: TextFormField(
+                                    controller: ctrls['quantite'],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Qté',
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: TextFormField(
+                                    controller: ctrls['unite'],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Unité',
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: composantInputs.length <= 1
+                                      ? null
+                                      : () {
+                                          composantInputs.removeAt(idx);
+                                          setLocal(() {});
+                                        },
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: instructionsCtrl,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'Instructions fabrication',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: conservationCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Conservation',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: posologieCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Posologie',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: coutCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Coût total (FCFA)',
+                                ),
+                                keyboardType: TextInputType.number,
+                                validator: (v) =>
+                                    double.tryParse(v ?? '') == null
+                                    ? 'Nombre'
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: prixCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Prix de vente (FCFA)',
+                                ),
+                                keyboardType: TextInputType.number,
+                                validator: (v) =>
+                                    double.tryParse(v ?? '') == null
+                                    ? 'Nombre'
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: statut,
+                          decoration: const InputDecoration(
+                            labelText: 'Statut',
+                          ),
+                          items: const ['Validée', 'En cours', 'Archivée']
+                              .map(
+                                (s) =>
+                                    DropdownMenuItem(value: s, child: Text(s)),
+                              )
+                              .toList(),
+                          onChanged: (v) => setLocal(() {
+                            statut = v ?? statut;
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Annuler'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (formKey.currentState?.validate() != true) return;
+                    Navigator.pop(context, true);
+                  },
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirm != true) return;
+    final now = DateTime.now();
+    final composants = composantInputs
+        .map((ctrls) {
+          final nom = ctrls['nom']!.text.trim();
+          final qty = double.tryParse(ctrls['quantite']!.text.trim()) ?? 0;
+          final unite = ctrls['unite']!.text.trim();
+          if (nom.isEmpty) return null;
+          return ComposantPreparation(nom: nom, quantite: qty, unite: unite);
+        })
+        .whereType<ComposantPreparation>()
+        .toList();
+
+    final formule =
+        (existing ??
+                PreparationMagistrale(
+                  id: 'FOR-${now.microsecondsSinceEpoch}',
+                  nom: '',
+                  categorie: '',
+                  quantiteTotale: 0,
+                  unite: '',
+                  composants: const [],
+                  instructions: '',
+                  conservation: '',
+                  posologie: '',
+                  statut: 'Validée',
+                  cout: 0,
+                  prix: 0,
+                  createdAt: now,
+                ))
+            .copyWith(
+              nom: nomCtrl.text.trim(),
+              categorie: categorieCtrl.text.trim(),
+              quantiteTotale: int.tryParse(quantiteCtrl.text.trim()) ?? 0,
+              unite: uniteCtrl.text.trim(),
+              composants: composants,
+              instructions: instructionsCtrl.text.trim(),
+              conservation: conservationCtrl.text.trim(),
+              posologie: posologieCtrl.text.trim(),
+              statut: statut,
+              cout: double.tryParse(coutCtrl.text.trim()) ?? 0,
+              prix: double.tryParse(prixCtrl.text.trim()) ?? 0,
+            );
+
+    await LocalDatabaseService.instance.upsertPreparationMagistrale(formule);
+    await _loadFormules();
+    if (!mounted) return;
+    setState(() => _formuleSelectionnee = formule);
+  }
+
+  Future<void> _confirmerSuppression(PreparationMagistrale formule) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer la formule'),
+        content: Text('Supprimer "${formule.nom}" ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
           ),
-          Text(
-            DateFormat('dd/MM/yyyy').format(p.date),
-            style: TextStyle(color: palette.subText),
-          ),
-          const SizedBox(width: 20),
-          Text(
-            p.preparateur,
-            style: TextStyle(color: accent, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          Text(
-            '${p.quantite} ml',
-            style: TextStyle(fontWeight: FontWeight.bold),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer'),
           ),
         ],
       ),
     );
+    if (confirm != true) return;
+    await LocalDatabaseService.instance.deletePreparationMagistrale(formule.id);
+    await _loadFormules();
+    if (!mounted) return;
+    if (_formuleSelectionnee?.id == formule.id) {
+      setState(() => _formuleSelectionnee = null);
+    }
   }
 
   Widget _section(String title, IconData icon, ThemeColors palette) {
@@ -600,46 +954,4 @@ class _PreparationsMagistralesScreenState
       child: child,
     );
   }
-}
-
-// === MODÈLES ===
-class Formula {
-  final String nom, categorie, conservation, posologie, instructions;
-  final int quantiteTotale;
-  final String unite;
-  final List<Composant> composants;
-  const Formula({
-    required this.nom,
-    required this.categorie,
-    required this.quantiteTotale,
-    required this.unite,
-    required this.composants,
-    required this.instructions,
-    required this.conservation,
-    required this.posologie,
-  });
-}
-
-class Composant {
-  final String nom, unite;
-  final double quantite;
-  const Composant({
-    required this.nom,
-    required this.quantite,
-    required this.unite,
-  });
-}
-
-class Preparation {
-  final String id, formule, preparateur, statut;
-  final DateTime date;
-  final int quantite;
-  const Preparation({
-    required this.id,
-    required this.date,
-    required this.formule,
-    required this.quantite,
-    required this.preparateur,
-    required this.statut,
-  });
 }
